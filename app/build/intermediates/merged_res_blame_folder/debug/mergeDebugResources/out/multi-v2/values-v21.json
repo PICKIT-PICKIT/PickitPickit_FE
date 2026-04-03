@@ -1,10 +1,10 @@
 {
     "logs": [
         {
-            "outputFile": "com.example.pickitpickit.app-mergeDebugResources-32:/values-v21/values-v21.xml",
+            "outputFile": "com.example.pickitpickit.app-mergeDebugResources-37:/values-v21/values-v21.xml",
             "map": [
                 {
-                    "source": "/Users/iseon-yong/.gradle/caches/8.13/transforms/2915ac4a79e79f07bf53eedf72d0e7fb/transformed/core-1.17.0/res/values-v21/values-v21.xml",
+                    "source": "/Users/iseon-yong/.gradle/caches/8.13/transforms/7e03d33ed255a66db3f4551e280941cc/transformed/core-1.17.0/res/values-v21/values-v21.xml",
                     "from": {
                         "startLines": "2,3,4,5,6,7,8,9,10,13",
                         "startColumns": "4,4,4,4,4,4,4,4,4,4",
