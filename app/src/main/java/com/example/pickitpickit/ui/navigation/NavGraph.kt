@@ -7,7 +7,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.pickitpickit.ui.home.HomeScreen
 import com.example.pickitpickit.ui.mypage.MyPageScreen
-import com.example.pickitpickit.ui.notifications.NotificationsScreen
 
 @Composable
 fun MainNavGraph(
