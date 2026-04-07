@@ -23,6 +23,9 @@ import androidx.compose.runtime.collectAsState
 import com.example.pickitpickit.ui.navigation.BottomNavMenuItem
 import com.example.pickitpickit.ui.navigation.MainNavGraph
 import com.example.pickitpickit.ui.theme.PickitPickitTheme
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import com.example.pickitpickit.ui.onboarding.OnboardingScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -30,8 +33,31 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PickitPickitTheme {
-                MainScreen()
+                RootApp()
             }
+        }
+    }
+}
+
+@Composable
+fun RootApp() {
+    val rootNavController = rememberNavController()
+
+    NavHost(
+        navController = rootNavController,
+        startDestination = "onboarding_flow" // 테스트를 위해 우선 온보딩으로 고정
+    ) {
+        composable("onboarding_flow") {
+            OnboardingScreen(
+                onComplete = {
+                    rootNavController.navigate("main_app") {
+                        popUpTo("onboarding_flow") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable("main_app") {
+            MainScreen()
         }
     }
 }
