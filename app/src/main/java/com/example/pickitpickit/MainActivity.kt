@@ -26,26 +26,57 @@ import com.example.pickitpickit.ui.theme.PickitPickitTheme
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.pickitpickit.ui.onboarding.OnboardingScreen
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        
+        var isCheckingState by mutableStateOf(true)
+        var initialRoute by mutableStateOf("onboarding")
+        
+        lifecycleScope.launch {
+            // 카카오 로그인이 구현되기 전 가짜 상태 점검 딜레이 (1.5초 대기)
+            delay(1500)
+            
+            // TODO: 추후 여기에 카카오 토큰 점검 / 온보딩 완료 여부 로직을 넣어서 분기
+            val isUserLoggedInAndOnboarded = false 
+            
+            initialRoute = if (isUserLoggedInAndOnboarded) {
+                "main_app" 
+            } else { 
+                "onboarding_flow" 
+            }
+            isCheckingState = false
+        }
+        
+        // 데이터가 전부 로딩될 때까지 스플래시 화면을 유지시킴
+        splashScreen.setKeepOnScreenCondition { isCheckingState }
+
         setContent {
             PickitPickitTheme {
-                RootApp()
+                if (!isCheckingState) {
+                    RootApp(startDestination = initialRoute)
+                }
             }
         }
     }
 }
 
 @Composable
-fun RootApp() {
+fun RootApp(startDestination: String = "onboarding_flow") {
     val rootNavController = rememberNavController()
 
     NavHost(
         navController = rootNavController,
-        startDestination = "onboarding_flow" // 테스트를 위해 우선 온보딩으로 고정
+        startDestination = startDestination
     ) {
         composable("onboarding_flow") {
             OnboardingScreen(

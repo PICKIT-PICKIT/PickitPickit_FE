@@ -86,10 +86,10 @@ fun OnboardingScreen(
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
+                    .padding(horizontal = 15.dp)
                     .weight(1f),
                 colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(14.dp),
                 elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
             ) {
                 HorizontalPager(
@@ -141,7 +141,7 @@ fun StepIndicator(currentStep: Int) {
             
             Box(
                 modifier = Modifier
-                    .size(32.dp)
+                    .size(44.dp)
                     .clip(CircleShape)
                     .background(color),
                 contentAlignment = Alignment.Center
@@ -175,10 +175,10 @@ fun NicknameStep(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(36.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("닉네임을 설정해주세요.", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text("닉네임을 설정해주세요.", fontSize = 29.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
         Text("다른 사용자들에게 보여질 이름입니다.", color = Color.Gray, fontSize = 14.sp)
         
@@ -230,7 +230,11 @@ fun ProfileImageStep(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
-    val sampleImages = listOf(Color.Red, Color.Blue, Color.Green, Color.Yellow, Color.Cyan, Color.Magenta)
+    val sampleImages = listOf(
+        Color.Red, Color.Blue, Color.Green, 
+        Color.Yellow, Color.Cyan, Color.Magenta,
+        Color.Gray, Color.Black, Color(0xFFFFA500)
+    )
     
     Column(
         modifier = Modifier
@@ -249,7 +253,7 @@ fun ProfileImageStep(
             columns = GridCells.Fixed(3),
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.height(150.dp)
+            modifier = Modifier.weight(1f) // 고정 높이 대신 weight(1f)를 사용하여 남은 공간 활용
         ) {
             items(sampleImages.size) { index ->
                 val color = sampleImages[index]
@@ -284,7 +288,7 @@ fun ProfileImageStep(
             }
         }
         
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp)) // 그리드와 버튼 사이 여백
         
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
