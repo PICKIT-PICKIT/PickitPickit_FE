@@ -24,26 +24,94 @@ import com.example.pickitpickit.ui.navigation.BottomNavMenuItem
 import com.example.pickitpickit.ui.navigation.MainNavGraph
 import com.example.pickitpickit.ui.theme.PickitPickitTheme
 
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.pickitpickit.core.datastore.UserPreferences
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.compose.runtime.rememberCoroutineScope
+import com.example.pickitpickit.ui.login.LoginScreen
+import com.example.pickitpickit.ui.onboarding.OnboardingScreen
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        val userPreferences = UserPreferences(this)
+        var startRoute by mutableStateOf<String?>(null)
+
+        lifecycleScope.launch {
+            userPreferences.isOnboardingCompleted.collect { completed ->
+                if (startRoute == null) {
+                    // 추후 카카오 자동 로그인 여부에 따라 Login으로 갈지 Onboarding으로 갈지 판단 가능.
+                    // 현재는 온보딩 완료 여부만 판단
+                    startRoute = if (completed) "Main" else "Login"
+                }
+            }
+        }
+
+        // startRoute가 결정될 때까지 스플래시 화면을 유지
+        splashScreen.setKeepOnScreenCondition { startRoute == null }
+
         setContent {
             PickitPickitTheme {
-                MainScreen()
+                startRoute?.let { route ->
+                    val mapViewModel: MapViewModel = viewModel()
+                    RootScreen(
+                        startRoute = route,
+                        mapViewModel = mapViewModel,
+                        userPreferences = userPreferences
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun MainScreen() {
+fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: UserPreferences) {
+    val rootNavController = rememberNavController()
+    val coroutineScope = rememberCoroutineScope()
+
+    NavHost(navController = rootNavController, startDestination = startRoute) {
+        composable("Login") {
+            LoginScreen(
+                onLoginSuccess = {
+                    rootNavController.navigate("Onboarding") {
+                        popUpTo("Login") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable("Onboarding") {
+            OnboardingScreen(
+                onComplete = {
+                    coroutineScope.launch {
+                        userPreferences.setOnboardingCompleted(true)
+                    }
+                    rootNavController.navigate("Main") {
+                        popUpTo("Onboarding") { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable("Main") {
+            MainScreen(mapViewModel = mapViewModel)
+        }
+    }
+}
+
+@Composable
+fun MainScreen(mapViewModel: MapViewModel) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
-    
-    // Shared MapViewModel
-    val mapViewModel: MapViewModel = viewModel()
     
     // 현재 ViewModel의 카테고리 상태 (탭 하이라이트 등 연동을 위함)
     val currentCategory by mapViewModel.selectedCategory.collectAsState()
@@ -61,8 +129,6 @@ fun MainScreen() {
         bottomBar = {
             NavigationBar {
                 bottomNavItems.forEach { item ->
-                    // 선택 여부 판별: 
-                    // 마이페이지는 라우트로 판별, 홈/기타탭은 MapCategory로 판별
                     val isSelected = if (item == BottomNavMenuItem.MyPage) {
                         currentRoute == item.route
                     } else {
@@ -83,7 +149,6 @@ fun MainScreen() {
                                     restoreState = true
                                 }
                             } else {
-                                // 현재 라우트가 Home(Map)이 아니면 Home으로 한 번 이동
                                 if (currentRoute != BottomNavMenuItem.Home.route) {
                                     navController.navigate(BottomNavMenuItem.Home.route) {
                                         navController.graph.startDestinationRoute?.let { route ->
@@ -93,7 +158,6 @@ fun MainScreen() {
                                         restoreState = true
                                     }
                                 }
-                                // 지도는 유지한 채 카테고리만 변경
                                 item.mapCategory?.let { mapViewModel.setCategory(it) }
                             }
                         }
@@ -107,13 +171,5 @@ fun MainScreen() {
             mapViewModel = mapViewModel,
             modifier = Modifier.padding(innerPadding)
         )
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun MainScreenPreview() {
-    PickitPickitTheme {
-        MainScreen()
     }
 }
