@@ -57,4 +57,5 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+    implementation("com.kakao.sdk:v2-user:2.20.1") // 카카오 로그인 SDK
 }
