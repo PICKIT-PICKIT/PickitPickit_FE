@@ -3,6 +3,8 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
 
     <application
         android:name=".GlobalApplication"
@@ -14,6 +16,10 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.PickitPickit">
+        <meta-data
+            android:name="com.kakao.maps.appKey"
+            android:value="4597cdb7fc04bfb5aca3e2f07d375aa7" />
+
         <activity
             android:name=".MainActivity"
             android:exported="true"

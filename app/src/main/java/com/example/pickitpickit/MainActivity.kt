@@ -51,7 +51,9 @@ class MainActivity : ComponentActivity() {
                 if (startRoute == null) {
                     // 추후 카카오 자동 로그인 여부에 따라 Login으로 갈지 Onboarding으로 갈지 판단 가능.
                     // 현재는 온보딩 완료 여부만 판단
-                    startRoute = if (completed) "Main" else "Login"
+                    // TODO: 개발 완료 후 아래 줄 원복 필요
+                    // startRoute = if (completed) "Main" else "Login"
+                    startRoute = "Main" // 임시: 메인 화면 바로 진입
                 }
             }
         }
