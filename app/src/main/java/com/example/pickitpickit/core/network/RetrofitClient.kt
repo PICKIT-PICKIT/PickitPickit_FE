@@ -18,7 +18,7 @@ import java.util.concurrent.TimeUnit
  */
 object RetrofitClient {
 
-    private const val BASE_URL = "https://pickit-pickit.site/"
+    const val BASE_URL = "https://pickit-pickit.site/"
 
     /**
      * AuthInterceptor를 주입해 클라이언트를 생성

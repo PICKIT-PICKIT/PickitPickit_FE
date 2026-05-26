@@ -12,6 +12,7 @@ import com.example.pickitpickit.ui.mypage.MyPageScreen
 fun MainNavGraph(
     navController: NavHostController, 
     mapViewModel: com.example.pickitpickit.ui.map.MapViewModel,
+    onLogoutClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     NavHost(
@@ -23,7 +24,7 @@ fun MainNavGraph(
             HomeScreen(mapViewModel = mapViewModel)
         }
         composable(BottomNavMenuItem.MyPage.route) {
-            MyPageScreen()
+            MyPageScreen(onLogoutClick = onLogoutClick)
         }
     }
 }
