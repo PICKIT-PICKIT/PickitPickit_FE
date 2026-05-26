@@ -64,6 +64,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.0.0")
     implementation("com.kakao.maps.open:android:2.12.8")
     implementation("com.google.android.gms:play-services-location:21.3.0")
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     // Retrofit + OkHttp (백엔드 API 통신)
     implementation("com.squareup.retrofit2:retrofit:2.11.0")

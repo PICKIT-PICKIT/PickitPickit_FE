@@ -1,18 +1,43 @@
 package com.example.pickitpickit.ui.onboarding
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.pickitpickit.core.model.DefaultProfileImageResponse
+import com.example.pickitpickit.core.model.InterestTagResponse
+import com.example.pickitpickit.core.network.OnboardingRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 
+/**
+ * 온보딩 화면의 전반적인 상태를 정의하는 데이터 클래스
+ */
 data class OnboardingState(
     val nickname: String = "",
-    val selectedProfileId: Int? = null,
-    val selectedTags: Set<String> = emptySet()
+    val selectedProfileUrl: String? = null,
+    val selectedProfileType: String = "DEFAULT", // KAKAO, DEFAULT
+    val selectedTagIds: Set<Long> = emptySet(),
+    
+    // API 조회 데이터
+    val kakaoProfileUrl: String? = null,
+    val defaultProfileImages: List<DefaultProfileImageResponse> = emptyList(),
+    val availableTags: List<InterestTagResponse> = emptyList(),
+    
+    // UI 공통 관리 상태
+    val isLoading: Boolean = false,
+    val errorMessage: String? = null,
+    val isCompleted: Boolean = false,
+    
+    // 복원할 초기 페이지 (0: 닉네임, 1: 프로필 이미지, 2: 관심 태그)
+    val initialPage: Int = 0
 )
 
 class OnboardingViewModel : ViewModel() {
+
+    private val repository = OnboardingRepository()
+
     private val _uiState = MutableStateFlow(OnboardingState())
     val uiState: StateFlow<OnboardingState> = _uiState.asStateFlow()
 
@@ -42,30 +67,197 @@ class OnboardingViewModel : ViewModel() {
         "종이비행기", "돗자리", "손난로", "헤드폰", "스탠드", "나침반", "유리병", "오르골", "돋보기", "장화"
     )
 
+    init {
+        loadOnboardingMeta()
+    }
+
+    /**
+     * 프로필 이미지 목록, 관심 태그 목록, 사용자 현재 온보딩 정보 조회 및 복원
+     */
+    private fun loadOnboardingMeta() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            
+            val imagesOption = repository.getProfileImages()
+            val tags = repository.getInterestTags()
+            val status = repository.getOnboardingStatus() // 현재까지 설정된 사용자 정보 조회
+            
+            if (imagesOption != null) {
+                _uiState.update { currentState ->
+                    // 1. 기존에 저장되어 있는 값들 복원
+                    val savedNickname = status?.nickname ?: ""
+                    val savedProfileUrl = status?.profileImageUrl ?: (imagesOption.defaultImages.firstOrNull()?.imageUrl)
+                    val savedProfileType = status?.profileImageType ?: "DEFAULT"
+                    val savedTagIds = status?.selectedTags?.map { it.id }?.toSet() ?: emptySet()
+                    
+                    // 2. 사용자의 진척도(닉네임, 프로필 이미지 유무)에 따라 복원할 첫 페이지(초기 Index) 결정
+                    val targetPage = when {
+                        savedNickname.isNotEmpty() && !status?.profileImageUrl.isNullOrEmpty() -> 2 // 3단계 (관심 태그)
+                        savedNickname.isNotEmpty() -> 1 // 2단계 (프로필 이미지)
+                        else -> 0 // 1단계 (닉네임)
+                    }
+                    
+                    currentState.copy(
+                        nickname = savedNickname,
+                        selectedProfileUrl = savedProfileUrl,
+                        selectedProfileType = savedProfileType,
+                        selectedTagIds = savedTagIds,
+                        kakaoProfileUrl = imagesOption.kakaoProfileImageUrl,
+                        defaultProfileImages = imagesOption.defaultImages,
+                        availableTags = tags,
+                        initialPage = targetPage,
+                        isLoading = false
+                    )
+                }
+            } else {
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "온보딩 설정 데이터를 불러오는 데 실패했습니다."
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 닉네임 입력 필드 갱신
+     */
     fun updateNickname(nickname: String) {
         if (nickname.length <= 10) {
             _uiState.update { it.copy(nickname = nickname) }
         }
     }
 
+    /**
+     * 임의 닉네임 생성
+     */
     fun generateRandomNickname() {
         val randomNickname = "${adjectives.random()} ${nouns.random()}"
         _uiState.update { it.copy(nickname = randomNickname) }
     }
 
-    fun selectProfileImage(imageId: Int) {
-        _uiState.update { it.copy(selectedProfileId = imageId) }
+    /**
+     * 닉네임 유효성 검사 및 서버 저장
+     */
+    fun saveNickname(onSuccess: () -> Unit) {
+        val currentNickname = _uiState.value.nickname.trim()
+        if (currentNickname.length < 2) {
+            _uiState.update { it.copy(errorMessage = "닉네임은 2자 이상 입력해주세요.") }
+            return
+        }
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val isSuccess = repository.updateNickname(currentNickname)
+            _uiState.update { it.copy(isLoading = false) }
+            
+            if (isSuccess) {
+                onSuccess()
+            } else {
+                _uiState.update { it.copy(errorMessage = "닉네임 저장에 실패했습니다. 다시 시도해 주세요.") }
+            }
+        }
     }
 
-    fun toggleTag(tag: String) {
-        _uiState.update { currentState ->
-            val tags = currentState.selectedTags.toMutableSet()
-            if (tags.contains(tag)) {
-                tags.remove(tag)
-            } else {
-                tags.add(tag)
-            }
-            currentState.copy(selectedTags = tags)
+    /**
+     * 프로필 이미지 선택 갱신
+     */
+    fun selectProfileImage(type: String, url: String) {
+        _uiState.update { 
+            it.copy(
+                selectedProfileUrl = url,
+                selectedProfileType = type
+            )
         }
+    }
+
+    /**
+     * 선택된 프로필 이미지 서버 저장
+     */
+    fun saveProfileImage(onSuccess: () -> Unit) {
+        val url = _uiState.value.selectedProfileUrl
+        val type = _uiState.value.selectedProfileType
+        
+        if (url.isNullOrEmpty()) {
+            _uiState.update { it.copy(errorMessage = "프로필 이미지를 선택해 주세요.") }
+            return
+        }
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val isSuccess = repository.updateProfileImage(type, url)
+            _uiState.update { it.copy(isLoading = false) }
+            
+            if (isSuccess) {
+                onSuccess()
+            } else {
+                _uiState.update { it.copy(errorMessage = "프로필 이미지 저장에 실패했습니다. 다시 시도해 주세요.") }
+            }
+        }
+    }
+
+    /**
+     * 관심사 태그 토글 처리
+     */
+    fun toggleTag(tagId: Long) {
+        _uiState.update { currentState ->
+            val tags = currentState.selectedTagIds.toMutableSet()
+            if (tags.contains(tagId)) {
+                tags.remove(tagId)
+            } else {
+                tags.add(tagId)
+            }
+            currentState.copy(selectedTagIds = tags)
+        }
+    }
+
+    /**
+     * 관심사 태그 저장 및 온보딩 최종 승인 처리
+     */
+    fun saveInterestTagsAndComplete(onSuccess: () -> Unit) {
+        val tagIds = _uiState.value.selectedTagIds.toList()
+        if (tagIds.isEmpty()) {
+            _uiState.update { it.copy(errorMessage = "최소 1개 이상의 태그를 선택해주세요.") }
+            return
+        }
+        
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            
+            // 1. 태그 목록 저장 PATCH
+            val isTagSaved = repository.updateInterestTags(tagIds)
+            if (!isTagSaved) {
+                _uiState.update { 
+                    it.copy(
+                        isLoading = false,
+                        errorMessage = "관심 태그 저장에 실패했습니다."
+                    )
+                }
+                return@launch
+            }
+            
+            // 2. 온보딩 완료 처리 POST
+            val completeResponse = repository.completeOnboarding()
+            _uiState.update { it.copy(isLoading = false) }
+            
+            if (completeResponse != null && completeResponse.onboardingCompleted) {
+                _uiState.update { it.copy(isCompleted = true) }
+                onSuccess()
+            } else {
+                _uiState.update { 
+                    it.copy(
+                        errorMessage = "온보딩 최종 처리 도중 오류가 발생했습니다."
+                    )
+                }
+            }
+        }
+    }
+
+    /**
+     * 에러 메시지 초기화
+     */
+    fun clearError() {
+        _uiState.update { it.copy(errorMessage = null) }
     }
 }
