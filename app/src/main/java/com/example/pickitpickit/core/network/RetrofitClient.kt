@@ -1,6 +1,7 @@
 package com.example.pickitpickit.core.network
 
 import com.example.pickitpickit.core.network.api.AuthApi
+import com.example.pickitpickit.core.network.api.SearchApi
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -57,5 +58,6 @@ object RetrofitClient {
     // API 인터페이스 접근자 (필요한 API 추가 시 여기에 추가)
     // ──────────────────────────────────────────────────────────────
 
-    val authApi: AuthApi by lazy { retrofit.create(AuthApi::class.java) }
+    val authApi: AuthApi   by lazy { retrofit.create(AuthApi::class.java) }
+    val searchApi: SearchApi by lazy { retrofit.create(SearchApi::class.java) }
 }

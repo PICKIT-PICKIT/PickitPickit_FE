@@ -233,6 +233,12 @@ fun HomeScreen(mapViewModel: MapViewModel) {
                             onSearchSelect = { query ->
                                 mapViewModel.updateSearchQuery(query)
                                 focusManager.clearFocus()
+                            },
+                            onDeleteRecentSearch = { keyword ->
+                                mapViewModel.deleteRecentSearch(keyword)
+                            },
+                            onClearAllRecentSearches = {
+                                mapViewModel.clearAllRecentSearches()
                             }
                         )
                     }
@@ -406,7 +412,9 @@ fun SearchBar(
 fun SearchDropdownPanel(
     recentSearches: List<String>,
     registeredTags: List<String>,
-    onSearchSelect: (String) -> Unit
+    onSearchSelect: (String) -> Unit,
+    onDeleteRecentSearch: (String) -> Unit,
+    onClearAllRecentSearches: () -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -417,11 +425,27 @@ fun SearchDropdownPanel(
         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // 최근 검색 Title
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF3B6EF8), modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("최근 검색", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
+            // 최근 검색 Title 및 전체 삭제 버튼
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color(0xFF3B6EF8), modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("최근 검색", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
+                }
+                if (recentSearches.isNotEmpty()) {
+                    Text(
+                        text = "전체 삭제",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        modifier = Modifier
+                            .clickable { onClearAllRecentSearches() }
+                            .padding(4.dp)
+                    )
+                }
             }
             Spacer(modifier = Modifier.height(12.dp))
             // 최근 검색 리스트
@@ -434,17 +458,34 @@ fun SearchDropdownPanel(
                 )
             } else {
                 recentSearches.forEach { search ->
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSearchSelect(search) }
-                        .padding(vertical = 8.dp, horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Text(search, fontSize = 15.sp, color = Color.DarkGray)
-                }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 4.dp, horizontal = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onSearchSelect(search) }
+                                .padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(search, fontSize = 15.sp, color = Color.DarkGray)
+                        }
+                        // 개별 삭제 버튼 (✕)
+                        Text(
+                            text = "✕",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            modifier = Modifier
+                                .clickable { onDeleteRecentSearch(search) }
+                                .padding(8.dp)
+                        )
+                    }
                 } // forEach 닫기
             } // else 닫기
             

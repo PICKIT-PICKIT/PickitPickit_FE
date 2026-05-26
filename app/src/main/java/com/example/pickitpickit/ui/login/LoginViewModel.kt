@@ -50,10 +50,11 @@ class LoginViewModel(
                 if (response.isSuccessful && response.body()?.success == true) {
                     val data = response.body()!!.data!!
 
-                    // JWT 토큰 DataStore에 저장
+                    // JWT 토큰 및 userId DataStore에 저장
                     userPreferences.saveTokens(
                         accessToken  = data.accessToken,
-                        refreshToken = data.refreshToken
+                        refreshToken = data.refreshToken,
+                        userId       = data.user.id
                     )
 
                     Log.i("LOGIN", "서버 로그인 성공 | userId=${data.user.id}, nickname=${data.user.nickname}")
