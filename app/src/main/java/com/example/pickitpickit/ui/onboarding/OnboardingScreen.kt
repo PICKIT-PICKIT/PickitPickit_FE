@@ -31,6 +31,9 @@ import androidx.compose.ui.res.painterResource
 import com.example.pickitpickit.R
 import androidx.compose.ui.tooling.preview.Preview
 import com.example.pickitpickit.ui.theme.PickitPickitTheme
+import coil.compose.AsyncImage
+import com.example.pickitpickit.core.model.DefaultProfileImageResponse
+import com.example.pickitpickit.core.model.InterestTagResponse
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -42,88 +45,137 @@ fun OnboardingScreen(
     val pagerState = rememberPagerState(pageCount = { 3 })
     val coroutineScope = rememberCoroutineScope()
 
-    Scaffold(
-        bottomBar = {
-            Text(
-                text = "프로필은 언제든지 설정에서 변경할 수 있습니다",
-                color = Color.Gray,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 24.dp)
-            )
+    // 서버에 저장되어 있던 온보딩 완료 진척도 페이지 복원
+    LaunchedEffect(uiState.initialPage) {
+        if (uiState.initialPage > 0) {
+            pagerState.scrollToPage(uiState.initialPage)
         }
-    ) { innerPadding ->
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(Color(0xFFF5F8FF)),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Spacer(modifier = Modifier.height(10.dp))
-            
-            Image(
-                painter = painterResource(id = R.drawable.logo_pikipiki),
-                contentDescription = "삐끼삐끼 로고",
-                modifier = Modifier
-                    .width(161.dp)
-                    .height(107.dp) // 높이를 지정하여 상단 여백 보장
-            )
+    }
 
-            Text(
-                text = "프로필을 완성하고 서비스를 시작하세요!",
-                fontSize = 18.sp,
-                color = Color.DarkGray
-            )
-            
-            Spacer(modifier = Modifier.height(24.dp))
-            StepIndicator(currentStep = pagerState.currentPage)
-            
-            Spacer(modifier = Modifier.height(30.dp))
-            
-            Card(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            bottomBar = {
+                Text(
+                    text = "프로필은 언제든지 설정에서 변경할 수 있습니다",
+                    color = Color.Gray,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 24.dp)
+                )
+            }
+        ) { innerPadding ->
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 15.dp)
-                    .weight(1f),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(14.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(Color(0xFFF5F8FF)),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                HorizontalPager(
-                    state = pagerState,
-                    userScrollEnabled = false,
-                    modifier = Modifier.fillMaxSize()
-                ) { page ->
-                    when (page) {
-                        0 -> NicknameStep(
-                            nickname = uiState.nickname,
-                            onNicknameChange = viewModel::updateNickname,
-                            onRandomNickname = viewModel::generateRandomNickname,
-                            onNext = {
-                                coroutineScope.launch {
-                                    pagerState.animateScrollToPage(1)
-                                }
-                            }
-                        )
-                        1 -> ProfileImageStep(
-                            selectedId = uiState.selectedProfileId,
-                            onSelectImage = viewModel::selectProfileImage,
-                            onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(0) } },
-                            onNext = { coroutineScope.launch { pagerState.animateScrollToPage(2) } }
-                        )
-                        2 -> InterestTagStep(
-                            selectedTags = uiState.selectedTags,
-                            onToggleTag = viewModel::toggleTag,
-                            onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
-                            onComplete = onComplete
-                        )
+                Spacer(modifier = Modifier.height(10.dp))
+                
+                Image(
+                    painter = painterResource(id = R.drawable.logo_pikipiki),
+                    contentDescription = "삐끼삐끼 로고",
+                    modifier = Modifier
+                        .width(161.dp)
+                        .height(107.dp)
+                )
+
+                Text(
+                    text = "프로필을 완성하고 서비스를 시작하세요!",
+                    fontSize = 18.sp,
+                    color = Color.DarkGray
+                )
+                
+                Spacer(modifier = Modifier.height(24.dp))
+                StepIndicator(currentStep = pagerState.currentPage)
+                
+                Spacer(modifier = Modifier.height(30.dp))
+                
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 15.dp)
+                        .weight(1f),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(14.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
+                        userScrollEnabled = false,
+                        modifier = Modifier.fillMaxSize()
+                    ) { page ->
+                        when (page) {
+                          0 -> NicknameStep(
+                              nickname = uiState.nickname,
+                              onNicknameChange = viewModel::updateNickname,
+                              onRandomNickname = viewModel::generateRandomNickname,
+                              onNext = {
+                                  viewModel.saveNickname {
+                                      coroutineScope.launch {
+                                          pagerState.animateScrollToPage(1)
+                                      }
+                                  }
+                              }
+                          )
+                          1 -> ProfileImageStep(
+                              selectedUrl = uiState.selectedProfileUrl,
+                              kakaoProfileUrl = uiState.kakaoProfileUrl,
+                              defaultImages = uiState.defaultProfileImages,
+                              onSelectImage = viewModel::selectProfileImage,
+                              onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(0) } },
+                              onNext = {
+                                  viewModel.saveProfileImage {
+                                      coroutineScope.launch {
+                                          pagerState.animateScrollToPage(2)
+                                      }
+                                  }
+                              }
+                          )
+                          2 -> InterestTagStep(
+                              selectedTagIds = uiState.selectedTagIds,
+                              availableTags = uiState.availableTags,
+                              onToggleTag = viewModel::toggleTag,
+                              onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
+                              onComplete = {
+                                  viewModel.saveInterestTagsAndComplete(onComplete)
+                              }
+                          )
+                        }
                     }
                 }
+                Spacer(modifier = Modifier.height(30.dp))
             }
-            Spacer(modifier = Modifier.height(30.dp))
+        }
+
+        // 로딩바 인디케이터 오버레이
+        if (uiState.isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .clickable(enabled = false) {}, // 클릭 전파 방지
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = Color(0xFF6B4EFF))
+            }
+        }
+
+        // 에러 메세지 알림창
+        if (uiState.errorMessage != null) {
+            AlertDialog(
+                onDismissRequest = { viewModel.clearError() },
+                confirmButton = {
+                    TextButton(onClick = { viewModel.clearError() }) {
+                        Text("확인", color = Color(0xFF6B4EFF), fontWeight = FontWeight.Bold)
+                    }
+                },
+                title = { Text("안내", fontWeight = FontWeight.Bold) },
+                text = { Text(uiState.errorMessage ?: "") }
+            )
         }
     }
 }
@@ -178,7 +230,7 @@ fun NicknameStep(
             .padding(36.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("닉네임을 설정해주세요.", fontSize = 29.sp, fontWeight = FontWeight.Bold)
+        Text("닉네임을 설정해주세요.", fontSize = 24.sp, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(8.dp))
         Text("다른 사용자들에게 보여질 이름입니다.", color = Color.Gray, fontSize = 14.sp)
         
@@ -197,7 +249,9 @@ fun NicknameStep(
         )
         
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -225,17 +279,25 @@ fun NicknameStep(
 
 @Composable
 fun ProfileImageStep(
-    selectedId: Int?,
-    onSelectImage: (Int) -> Unit,
+    selectedUrl: String?,
+    kakaoProfileUrl: String?,
+    defaultImages: List<DefaultProfileImageResponse>,
+    onSelectImage: (type: String, url: String) -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
-    val sampleImages = listOf(
-        Color.Red, Color.Blue, Color.Green, 
-        Color.Yellow, Color.Cyan, Color.Magenta,
-        Color.Gray, Color.Black, Color(0xFFFFA500)
-    )
-    
+    // 렌더링에 사용할 임시 리스트 조립 (카카오 이미지 정보가 있으면 첫 번째 배치)
+    val displayList = remember(kakaoProfileUrl, defaultImages) {
+        val list = mutableListOf<Pair<String, String>>() // Pair(Type, Url)
+        if (!kakaoProfileUrl.isNullOrEmpty()) {
+            list.add(Pair("KAKAO", kakaoProfileUrl))
+        }
+        defaultImages.forEach {
+            list.add(Pair("DEFAULT", it.imageUrl))
+        }
+        list
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -248,61 +310,101 @@ fun ProfileImageStep(
         
         Spacer(modifier = Modifier.height(24.dp))
         
-        // Profiles grid placeholder
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(3),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.weight(1f) // 고정 높이 대신 weight(1f)를 사용하여 남은 공간 활용
-        ) {
-            items(sampleImages.size) { index ->
-                val color = sampleImages[index]
-                val isSelected = selectedId == index
-                Box(
-                    modifier = Modifier
-                        .aspectRatio(1f)
-                        .clip(CircleShape)
-                        .background(color.copy(alpha = 0.5f))
-                        .border(
-                            width = if (isSelected) 3.dp else 0.dp,
-                            color = if (isSelected) Color(0xFF6B4EFF) else Color.Transparent,
-                            shape = CircleShape
-                        )
-                        .clickable { onSelectImage(index) },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(Icons.Default.Person, contentDescription = null, tint = Color.White)
-                    if (isSelected) {
+        if (displayList.isEmpty()) {
+            // 데이터 로드 전/실패 시 더미 표시
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF6B4EFF))
+            }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(3),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                items(displayList.size) { index ->
+                    val (type, url) = displayList[index]
+                    val isSelected = selectedUrl == url
+                    
+                    Box(
+                        modifier = Modifier
+                            .aspectRatio(1f)
+                            .clickable { onSelectImage(type, url) },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // 실제 동그란 프로필 이미지 영역
                         Box(
                             modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .size(20.dp)
+                                .fillMaxSize(0.85f) // 체크박스/배지가 들어갈 공간을 확보하기 위해 약간의 여백 확보
                                 .clip(CircleShape)
-                                .background(Color(0xFF6B4EFF)),
+                                .background(Color.LightGray.copy(alpha = 0.2f))
+                                .border(
+                                    width = if (isSelected) 3.dp else 0.dp,
+                                    color = if (isSelected) Color(0xFF6B4EFF) else Color.Transparent,
+                                    shape = CircleShape
+                                ),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                            AsyncImage(
+                                model = url,
+                                contentDescription = if (type == "KAKAO") "카카오 프로필" else "기본 프로필",
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                            )
+                        }
+                        
+                        if (isSelected) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF6B4EFF))
+                                    .border(2.dp, Color.White, CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(12.dp))
+                            }
+                        }
+                        
+                        // 카카오 이미지 상단 조그만 뱃지 표시
+                        if (type == "KAKAO") {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .background(Color(0xFFFEE500), RoundedCornerShape(4.dp))
+                                    .border(1.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                Text("Talk", color = Color(0xFF3C1E1E), fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
             }
         }
         
-        Spacer(modifier = Modifier.height(16.dp)) // 그리드와 버튼 사이 여백
+        Spacer(modifier = Modifier.height(16.dp))
         
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = onPrev,
-                modifier = Modifier.weight(1f).height(50.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
                 shape = RoundedCornerShape(25.dp)
             ) {
                 Text("이전", color = Color.Black)
             }
             Button(
                 onClick = onNext,
-                modifier = Modifier.weight(2f).height(50.dp),
+                modifier = Modifier
+                    .weight(2f)
+                    .height(50.dp),
                 shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2A7B)) // 카카오 버튼 컬러 등 임시
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B4EFF)),
+                enabled = selectedUrl != null
             ) {
                 Text("다음 단계 →", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
@@ -313,13 +415,12 @@ fun ProfileImageStep(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun InterestTagStep(
-    selectedTags: Set<String>,
-    onToggleTag: (String) -> Unit,
+    selectedTagIds: Set<Long>,
+    availableTags: List<InterestTagResponse>,
+    onToggleTag: (Long) -> Unit,
     onPrev: () -> Unit,
     onComplete: () -> Unit
 ) {
-    val sampleTags = listOf("포켓몬", "디즈니", "원피스", "산리오", "마블", "BT21", "짱구", "팬텀", "귀멸의칼날", "나루토", "메이플스토리", "카카오프렌즈", "지브리")
-    
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -333,54 +434,70 @@ fun InterestTagStep(
         Spacer(modifier = Modifier.height(24.dp))
         
         Box(
-            modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).background(Color(0xFFFFF0F5)).padding(12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFFEEF2FF))
+                .padding(12.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text("${selectedTags.size}개 선택됨", color = Color(0xFFFF2A7B), fontWeight = FontWeight.Bold)
+            Text("${selectedTagIds.size}개 선택됨", color = Color(0xFF6B4EFF), fontWeight = FontWeight.Bold)
         }
         
         Spacer(modifier = Modifier.height(16.dp))
         
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            sampleTags.forEach { tag ->
-                val isSelected = selectedTags.contains(tag)
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(16.dp))
-                        .background(if (isSelected) Color(0xFFFF2A7B) else Color.White)
-                        .border(
-                            width = 1.dp,
-                            color = if (isSelected) Color.Transparent else Color.LightGray,
-                            shape = RoundedCornerShape(16.dp)
-                        )
-                        .clickable { onToggleTag(tag) }
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    Text(tag, color = if (isSelected) Color.White else Color.DarkGray, fontSize = 14.sp)
+        if (availableTags.isEmpty()) {
+            Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(color = Color(0xFF6B4EFF))
+            }
+        } else {
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                availableTags.forEach { tag ->
+                    val isSelected = selectedTagIds.contains(tag.id)
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(if (isSelected) Color(0xFF6B4EFF) else Color.White)
+                            .border(
+                                width = 1.dp,
+                                color = if (isSelected) Color.Transparent else Color.LightGray,
+                                shape = RoundedCornerShape(16.dp)
+                            )
+                            .clickable { onToggleTag(tag.id) }
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(tag.name, color = if (isSelected) Color.White else Color.DarkGray, fontSize = 14.sp)
+                    }
                 }
             }
         }
         
-        Spacer(modifier = Modifier.weight(1f))
+        Spacer(modifier = Modifier.height(16.dp))
         
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(
                 onClick = onPrev,
-                modifier = Modifier.weight(1f).height(50.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .height(50.dp),
                 shape = RoundedCornerShape(25.dp)
             ) {
                 Text("이전", color = Color.Black)
             }
             Button(
                 onClick = onComplete,
-                modifier = Modifier.weight(2f).height(50.dp),
+                modifier = Modifier
+                    .weight(2f)
+                    .height(50.dp),
                 shape = RoundedCornerShape(25.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF2A7B)),
-                enabled = selectedTags.isNotEmpty()
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6B4EFF)),
+                enabled = selectedTagIds.isNotEmpty()
             ) {
                 Text("완료하고 시작하기 ✓", fontSize = 16.sp, fontWeight = FontWeight.Bold)
             }
@@ -392,52 +509,57 @@ fun InterestTagStep(
 @Composable
 fun OnboardingScreenPreview() {
     PickitPickitTheme {
-        // ViewModel 기본값이 선언되어 있어 Preview 환경에서도 인스턴스가 자동으로 생성됩니다.
         OnboardingScreen(onComplete = {})
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "1단계: 닉네임 입력")
 @Composable
 fun NicknameStepPreview() {
     PickitPickitTheme {
-        Box(modifier = Modifier.background(Color.White).fillMaxWidth().height(400.dp)) {
-            NicknameStep(
-                nickname = "홍길동",
-                onNicknameChange = {},
-                onRandomNickname = {},
-                onNext = {}
-            )
-        }
+        NicknameStep(
+            nickname = "홍길동",
+            onNicknameChange = {},
+            onRandomNickname = {},
+            onNext = {}
+        )
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "2단계: 프로필 선택")
 @Composable
 fun ProfileImageStepPreview() {
     PickitPickitTheme {
-        Box(modifier = Modifier.background(Color.White).fillMaxWidth().height(500.dp)) {
-            ProfileImageStep(
-                selectedId = 1,
-                onSelectImage = {},
-                onPrev = {},
-                onNext = {}
-            )
-        }
+        ProfileImageStep(
+            selectedUrl = null,
+            kakaoProfileUrl = "https://example.com/kakao.jpg",
+            defaultImages = listOf(
+                DefaultProfileImageResponse("1", "https://example.com/1.jpg"),
+                DefaultProfileImageResponse("2", "https://example.com/2.jpg"),
+                DefaultProfileImageResponse("3", "https://example.com/3.jpg")
+            ),
+            onSelectImage = { _, _ -> },
+            onPrev = {},
+            onNext = {}
+        )
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showBackground = true, name = "3단계: 태그 선택")
 @Composable
 fun InterestTagStepPreview() {
     PickitPickitTheme {
-        Box(modifier = Modifier.background(Color.White).fillMaxWidth().height(500.dp)) {
-            InterestTagStep(
-                selectedTags = setOf("포켓몬", "디즈니", "기동전사 건담"),
-                onToggleTag = {},
-                onPrev = {},
-                onComplete = {}
-            )
-        }
+        InterestTagStep(
+            selectedTagIds = setOf(1L, 2L),
+            availableTags = listOf(
+                InterestTagResponse(1L, "산리오"),
+                InterestTagResponse(2L, "포켓몬"),
+                InterestTagResponse(3L, "짱구"),
+                InterestTagResponse(4L, "커비")
+            ),
+            onToggleTag = {},
+            onPrev = {},
+            onComplete = {}
+        )
     }
 }

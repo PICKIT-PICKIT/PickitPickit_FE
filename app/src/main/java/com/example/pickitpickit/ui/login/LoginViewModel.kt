@@ -56,6 +56,9 @@ class LoginViewModel(
                         refreshToken = data.refreshToken,
                         userId       = data.user.id
                     )
+                    
+                    // 서버 온보딩 상태를 로컬 DataStore에 동기화
+                    userPreferences.setOnboardingCompleted(data.user.onboardingCompleted)
 
                     Log.i("LOGIN", "서버 로그인 성공 | userId=${data.user.id}, nickname=${data.user.nickname}")
                     // 서버가 알려주는 온보딩 완료 여부를 그대로 전달
