@@ -36,6 +36,7 @@ import androidx.navigation.compose.composable
 import androidx.compose.runtime.rememberCoroutineScope
 import com.example.pickitpickit.ui.login.LoginScreen
 import com.example.pickitpickit.ui.onboarding.OnboardingScreen
+import com.kakao.sdk.user.UserApiClient
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,11 +50,16 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             userPreferences.isOnboardingCompleted.collect { completed ->
                 if (startRoute == null) {
-                    // 추후 카카오 자동 로그인 여부에 따라 Login으로 갈지 Onboarding으로 갈지 판단 가능.
-                    // 현재는 온보딩 완료 여부만 판단
-                    // TODO: 개발 완료 후 아래 줄 원복 필요
-                    // startRoute = if (completed) "Main" else "Login"
-                    startRoute = "Main" // 임시: 메인 화면 바로 진입
+                    // 카카오 로그인 세션 확인
+                    UserApiClient.instance.me { user, error ->
+                        if (error != null) {
+                            // 로그인 정보가 없거나 에러 발생 시 로그인 화면으로
+                            startRoute = "Login"
+                        } else {
+                            // 로그인 되어 있는 경우 온보딩 완료 여부에 따라 경로 결정
+                            startRoute = if (completed) "Main" else "Onboarding"
+                        }
+                    }
                 }
             }
         }
