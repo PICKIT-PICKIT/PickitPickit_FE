@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -24,6 +25,7 @@ class UserPreferences(private val context: Context) {
     // TODO: 백엔드 명세 확인 후 키 이름 변경 가능
     private val ACCESS_TOKEN_KEY  = stringPreferencesKey("access_token")
     private val REFRESH_TOKEN_KEY = stringPreferencesKey("refresh_token")
+    private val USER_ID_KEY       = longPreferencesKey("user_id")
 
     // ──────────────────────────────────────────────────────────────
     // 온보딩 완료 상태
@@ -42,25 +44,33 @@ class UserPreferences(private val context: Context) {
 
     /** Access Token 읽기 (없으면 null) */
     fun getAccessToken(): Flow<String?> = context.dataStore.data
-        .map { it[ACCESS_TOKEN_KEY] }
+         .map { it[ACCESS_TOKEN_KEY] }
 
     /** Refresh Token 읽기 (없으면 null) */
     fun getRefreshToken(): Flow<String?> = context.dataStore.data
-        .map { it[REFRESH_TOKEN_KEY] }
+         .map { it[REFRESH_TOKEN_KEY] }
 
-    /** 로그인 성공 시 토큰 저장 */
-    suspend fun saveTokens(accessToken: String, refreshToken: String) {
-        context.dataStore.edit {
-            it[ACCESS_TOKEN_KEY]  = accessToken
-            it[REFRESH_TOKEN_KEY] = refreshToken
+    /** User ID 읽기 (없으면 null) */
+    fun getUserId(): Flow<Long?> = context.dataStore.data
+         .map { it[USER_ID_KEY] }
+
+    /** 로그인 성공 시 토큰 저장 및 userId 저장 */
+    suspend fun saveTokens(accessToken: String, refreshToken: String, userId: Long? = null) {
+        context.dataStore.edit { prefs ->
+            prefs[ACCESS_TOKEN_KEY]  = accessToken
+            prefs[REFRESH_TOKEN_KEY] = refreshToken
+            if (userId != null) {
+                prefs[USER_ID_KEY] = userId
+            }
         }
     }
 
-    /** 로그아웃 시 토큰 삭제 */
+    /** 로그아웃 시 토큰 및 유저 정보 삭제 */
     suspend fun clearTokens() {
-        context.dataStore.edit {
-            it.remove(ACCESS_TOKEN_KEY)
-            it.remove(REFRESH_TOKEN_KEY)
+        context.dataStore.edit { prefs ->
+            prefs.remove(ACCESS_TOKEN_KEY)
+            prefs.remove(REFRESH_TOKEN_KEY)
+            prefs.remove(USER_ID_KEY)
         }
     }
 
