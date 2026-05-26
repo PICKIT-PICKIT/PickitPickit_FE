@@ -89,10 +89,15 @@ fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: 
 
     NavHost(navController = rootNavController, startDestination = startRoute) {
         composable("Login") {
+            val context = androidx.compose.ui.platform.LocalContext.current
             LoginScreen(
                 onLoginSuccess = { onboardingCompleted ->
-                    // 서버가 알려주는 온보딩 여부로 다음 화면 결정
-                    val destination = if (onboardingCompleted) "Main" else "Onboarding"
+                    // 🌟 서버의 온보딩 완료 값(onboardingCompleted) 그대로 100% 신뢰하여 라우팅하는 원래 정석 로직으로 완벽 복원!
+                    val destination = if (onboardingCompleted) {
+                        "Main"
+                    } else {
+                        "Onboarding"
+                    }
                     rootNavController.navigate(destination) {
                         popUpTo("Login") { inclusive = true }
                     }
@@ -109,17 +114,42 @@ fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: 
                     rootNavController.navigate("Main") {
                         popUpTo("Onboarding") { inclusive = true }
                     }
+                },
+                onLogout = {
+                    coroutineScope.launch {
+                        userPreferences.clearTokens()
+                        rootNavController.navigate("Login") {
+                            popUpTo("Onboarding") { inclusive = true }
+                        }
+                    }
                 }
             )
         }
         composable("Main") {
-            MainScreen(mapViewModel = mapViewModel)
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val authRepository = androidx.compose.runtime.remember {
+                com.example.pickitpickit.core.network.AuthRepository(userPreferences, context)
+            }
+            MainScreen(
+                mapViewModel = mapViewModel,
+                onLogoutClick = {
+                    coroutineScope.launch {
+                        authRepository.logout { success ->
+                            if (success) {
+                                rootNavController.navigate("Login") {
+                                    popUpTo("Main") { inclusive = true }
+                                }
+                            }
+                        }
+                    }
+                }
+            )
         }
     }
 }
 
 @Composable
-fun MainScreen(mapViewModel: MapViewModel) {
+fun MainScreen(mapViewModel: MapViewModel, onLogoutClick: () -> Unit) {
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -177,10 +207,15 @@ fun MainScreen(mapViewModel: MapViewModel) {
             }
         }
     ) { innerPadding ->
-        MainNavGraph(
+        com.example.pickitpickit.ui.navigation.MainNavGraph(
             navController = navController,
             mapViewModel = mapViewModel,
+            onLogoutClick = onLogoutClick,
             modifier = Modifier.padding(innerPadding)
         )
     }
+}
+
+object TestConfig {
+    var isForceOnboardingTest = false
 }

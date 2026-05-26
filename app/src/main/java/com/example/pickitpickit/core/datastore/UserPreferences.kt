@@ -65,12 +65,13 @@ class UserPreferences(private val context: Context) {
         }
     }
 
-    /** 로그아웃 시 토큰 및 유저 정보 삭제 */
+    /** 로그아웃 시 토큰 및 유저 정보 삭제 & 온보딩 완료 상태 리셋 (테스트 및 재진입 지원) */
     suspend fun clearTokens() {
         context.dataStore.edit { prefs ->
             prefs.remove(ACCESS_TOKEN_KEY)
             prefs.remove(REFRESH_TOKEN_KEY)
             prefs.remove(USER_ID_KEY)
+            prefs[ONBOARDING_COMPLETED_KEY] = false
         }
     }
 

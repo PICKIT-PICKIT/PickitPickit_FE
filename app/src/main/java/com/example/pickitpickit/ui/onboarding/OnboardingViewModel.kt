@@ -1,5 +1,6 @@
 package com.example.pickitpickit.ui.onboarding
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pickitpickit.core.model.DefaultProfileImageResponse
@@ -23,6 +24,7 @@ data class OnboardingState(
     // API 조회 데이터
     val kakaoProfileUrl: String? = null,
     val defaultProfileImages: List<DefaultProfileImageResponse> = emptyList(),
+    val backendDefaultProfileImages: List<DefaultProfileImageResponse> = emptyList(), // 백엔드 진짜 상대경로 이미지 원본 보존용
     val availableTags: List<InterestTagResponse> = emptyList(),
     
     // UI 공통 관리 상태
@@ -78,44 +80,90 @@ class OnboardingViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             
+            // 6종 고품질 로컬 Unsplash 기본 이미지 리스트 정의
+            val defaultUnsplashImages = listOf(
+                DefaultProfileImageResponse("1", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"),
+                DefaultProfileImageResponse("2", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"),
+                DefaultProfileImageResponse("3", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80"),
+                DefaultProfileImageResponse("4", "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80"),
+                DefaultProfileImageResponse("5", "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80"),
+                DefaultProfileImageResponse("6", "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80")
+            )
+
+            // 서버로부터 조회 시도 (재시도 및 엇박자 복구는 Repository 내재화로 1회 안전 호출!)
             val imagesOption = repository.getProfileImages()
-            val tags = repository.getInterestTags()
+            var tags = repository.getInterestTags()
             val status = repository.getOnboardingStatus() // 현재까지 설정된 사용자 정보 조회
             
-            if (imagesOption != null) {
-                _uiState.update { currentState ->
-                    // 1. 기존에 저장되어 있는 값들 복원
-                    val savedNickname = status?.nickname ?: ""
-                    val savedProfileUrl = status?.profileImageUrl ?: (imagesOption.defaultImages.firstOrNull()?.imageUrl)
-                    val savedProfileType = status?.profileImageType ?: "DEFAULT"
-                    val savedTagIds = status?.selectedTags?.map { it.id }?.toSet() ?: emptySet()
-                    
-                    // 2. 사용자의 진척도(닉네임, 프로필 이미지 유무)에 따라 복원할 첫 페이지(초기 Index) 결정
-                    val targetPage = when {
-                        savedNickname.isNotEmpty() && !status?.profileImageUrl.isNullOrEmpty() -> 2 // 3단계 (관심 태그)
-                        savedNickname.isNotEmpty() -> 1 // 2단계 (프로필 이미지)
-                        else -> 0 // 1단계 (닉네임)
-                    }
-                    
-                    currentState.copy(
-                        nickname = savedNickname,
-                        selectedProfileUrl = savedProfileUrl,
-                        selectedProfileType = savedProfileType,
-                        selectedTagIds = savedTagIds,
-                        kakaoProfileUrl = imagesOption.kakaoProfileImageUrl,
-                        defaultProfileImages = imagesOption.defaultImages,
-                        availableTags = tags,
-                        initialPage = targetPage,
-                        isLoading = false
-                    )
+            // 카카오 프로필은 백엔드가 준 데이터를 우선해 살려두고, 
+            // 기본 프로필 6종 후보군은 서버의 깨진 경로 대신 준비해둔 Unsplash 고화질 6장으로 무조건 덮어쓰기 적용!
+            val finalImagesOption = com.example.pickitpickit.core.model.ProfileImageOptionsResponse(
+                kakaoProfileImageUrl = imagesOption?.kakaoProfileImageUrl ?: status?.kakaoProfileImageUrl,
+                defaultImages = defaultUnsplashImages
+            )
+            
+            // [Fallback] 서버 관심 태그 목록이 비어있는 경우 시안의 15개 관심 태그 리스트로 대체
+            if (tags.isEmpty()) {
+                tags = listOf(
+                    InterestTagResponse(1L, "포켓몬"),
+                    InterestTagResponse(2L, "디즈니"),
+                    InterestTagResponse(3L, "원피스"),
+                    InterestTagResponse(4L, "산리오"),
+                    InterestTagResponse(5L, "마블"),
+                    InterestTagResponse(6L, "BT21"),
+                    InterestTagResponse(7L, "짱구"),
+                    InterestTagResponse(8L, "팬텀"),
+                    InterestTagResponse(9L, "귀멸의칼날"),
+                    InterestTagResponse(10L, "나루토"),
+                    InterestTagResponse(11L, "카카오"),
+                    InterestTagResponse(12L, "지브리"),
+                    InterestTagResponse(13L, "메이플"),
+                    InterestTagResponse(14L, "스누피"),
+                    InterestTagResponse(15L, "드래곤볼")
+                )
+            }
+            
+            if (status == null) {
+                Log.e("ONBOARDING_FLOW", "온보딩 상태 조회 최종 실패: USER_NOT_FOUND 유령 토큰 의심")
+                _uiState.update { it.copy(isLoading = false, errorMessage = "USER_NOT_FOUND") }
+                return@launch
+            }
+            
+            _uiState.update { currentState ->
+                // 1. 기존에 저장되어 있는 값들 복원
+                val savedNickname = status.nickname ?: ""
+                val savedProfileUrl = status.profileImageUrl ?: (finalImagesOption.defaultImages.firstOrNull()?.imageUrl)
+                val savedProfileType = status.profileImageType ?: "DEFAULT"
+                val savedTagIds = status.selectedTags?.map { it.id }?.toSet() ?: emptySet()
+                
+                // [🌟 초강력 수동 복원 동기화 장치]
+                // 이미 서버 상에 온보딩(닉네임이 비어있지 않음)이 완료된 상태임이 확실시된다면,
+                // 기기의 DataStore가 리셋되었더라도 지체 없이 온보딩 성공 완료(isCompleted = true) 플래그를 세워 메인 화면으로 통과시킵니다!
+                val alreadyCompleted = savedNickname.isNotEmpty() && savedTagIds.isNotEmpty()
+                if (alreadyCompleted) {
+                    Log.i("ONBOARDING_FLOW", "검증 완료: 이미 서버 상에 온보딩이 성공적으로 완수된 회원입니다! 메인 화면으로 즉시 자동 스킵 통과 처리합니다. 🏆🚀")
                 }
-            } else {
-                _uiState.update { 
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "온보딩 설정 데이터를 불러오는 데 실패했습니다."
-                    )
+                
+                // 2. 사용자의 진척도(닉네임, 프로필 이미지 유무)에 따라 복원할 첫 페이지(초기 Index) 결정
+                val targetPage = when {
+                    savedNickname.isNotEmpty() && !status.profileImageUrl.isNullOrEmpty() -> 2 // 3단계 (관심 태그)
+                    savedNickname.isNotEmpty() -> 1 // 2단계 (프로필 이미지)
+                    else -> 0 // 1단계 (닉네임)
                 }
+                
+                currentState.copy(
+                    nickname = savedNickname,
+                    selectedProfileUrl = savedProfileUrl,
+                    selectedProfileType = savedProfileType,
+                    selectedTagIds = savedTagIds,
+                    kakaoProfileUrl = finalImagesOption.kakaoProfileImageUrl ?: status.kakaoProfileImageUrl,
+                    defaultProfileImages = finalImagesOption.defaultImages,
+                    backendDefaultProfileImages = imagesOption?.defaultImages ?: emptyList(),
+                    availableTags = tags,
+                    initialPage = targetPage,
+                    isCompleted = alreadyCompleted, // 🌟 이미 완료되었다면 isCompleted = true로 세팅!
+                    isLoading = false
+                )
             }
         }
     }
@@ -142,6 +190,7 @@ class OnboardingViewModel : ViewModel() {
      */
     fun saveNickname(onSuccess: () -> Unit) {
         val currentNickname = _uiState.value.nickname.trim()
+        Log.i("ONBOARDING_FLOW", "STEP 1 - 닉네임 저장 요청: '$currentNickname'")
         if (currentNickname.length < 2) {
             _uiState.update { it.copy(errorMessage = "닉네임은 2자 이상 입력해주세요.") }
             return
@@ -149,13 +198,19 @@ class OnboardingViewModel : ViewModel() {
         
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val isSuccess = repository.updateNickname(currentNickname)
+            val errorMsg = repository.updateNickname(currentNickname)
             _uiState.update { it.copy(isLoading = false) }
             
-            if (isSuccess) {
+            if (errorMsg == null) {
+                Log.i("ONBOARDING_FLOW", "STEP 1 - 닉네임 저장 성공! 🎉")
                 onSuccess()
             } else {
-                _uiState.update { it.copy(errorMessage = "닉네임 저장에 실패했습니다. 다시 시도해 주세요.") }
+                Log.e("ONBOARDING_FLOW", "STEP 1 - 닉네임 저장 실패 ❌: $errorMsg")
+                if (errorMsg.contains("USER_NOT_FOUND") || errorMsg.contains("찾을 수 없습니다")) {
+                    _uiState.update { it.copy(errorMessage = "USER_NOT_FOUND") }
+                } else {
+                    _uiState.update { it.copy(errorMessage = errorMsg) }
+                }
             }
         }
     }
@@ -164,6 +219,7 @@ class OnboardingViewModel : ViewModel() {
      * 프로필 이미지 선택 갱신
      */
     fun selectProfileImage(type: String, url: String) {
+        Log.i("ONBOARDING_FLOW", "대표 프로필 선택 갱신: 타입=$type, URL=$url")
         _uiState.update { 
             it.copy(
                 selectedProfileUrl = url,
@@ -172,26 +228,52 @@ class OnboardingViewModel : ViewModel() {
         }
     }
 
-    /**
-     * 선택된 프로필 이미지 서버 저장
-     */
     fun saveProfileImage(onSuccess: () -> Unit) {
         val url = _uiState.value.selectedProfileUrl
         val type = _uiState.value.selectedProfileType
+        Log.i("ONBOARDING_FLOW", "STEP 2 - 프로필 이미지 저장 요청: 타입=$type, URL=$url")
         
         if (url.isNullOrEmpty()) {
             _uiState.update { it.copy(errorMessage = "프로필 이미지를 선택해 주세요.") }
             return
         }
         
+        // [듀얼 파이프라인 매핑] 화면용 고화질 Unsplash 이미지 URL을 백엔드 진짜 상대경로 이미지 URL로 1:1 역치환
+        // [카카오 프로필 저장 화이트리스트 호환 우회] 백엔드가 엄격하게 'http://' 카카오 CDN 주소만 화이트리스트로 허용하여 
+        // 보안 로딩용 'https://' 주소를 INVALID_PROFILE_IMAGE(400)로 튕겨내므로 전송 시에 원래 'http://' 형태로 역변환하여 안전하게 저장합니다.
+        val finalUrl = if (type == "DEFAULT") {
+            val unsplashList = _uiState.value.defaultProfileImages
+            val backendList = _uiState.value.backendDefaultProfileImages
+            val index = unsplashList.indexOfFirst { it.imageUrl == url }
+            if (index in 0 until backendList.size) {
+                val mapped = backendList[index].imageUrl
+                Log.d("ONBOARDING_FLOW", "기본 프로필 맵핑 완료: Unsplash=$url -> Backend=$mapped")
+                mapped
+            } else {
+                url
+            }
+        } else if (type == "KAKAO") {
+            if (url.startsWith("https://k.kakaocdn.net")) {
+                val replaced = url.replace("https://k.kakaocdn.net", "http://k.kakaocdn.net")
+                Log.d("ONBOARDING_FLOW", "카카오 HTTPS 우회 변환 적용: $url -> $replaced")
+                replaced
+            } else {
+                url
+            }
+        } else {
+            url
+        }
+        
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
-            val isSuccess = repository.updateProfileImage(type, url)
+            val isSuccess = repository.updateProfileImage(type, finalUrl)
             _uiState.update { it.copy(isLoading = false) }
             
             if (isSuccess) {
+                Log.i("ONBOARDING_FLOW", "STEP 2 - 프로필 이미지 저장 성공! 🎉")
                 onSuccess()
             } else {
+                Log.e("ONBOARDING_FLOW", "STEP 2 - 프로필 이미지 저장 실패 ❌ (전송 주소: $finalUrl)")
                 _uiState.update { it.copy(errorMessage = "프로필 이미지 저장에 실패했습니다. 다시 시도해 주세요.") }
             }
         }
@@ -208,6 +290,7 @@ class OnboardingViewModel : ViewModel() {
             } else {
                 tags.add(tagId)
             }
+            Log.d("ONBOARDING_FLOW", "관심사 태그 토글: 현재 선택 태그 ID 리스트 = $tags")
             currentState.copy(selectedTagIds = tags)
         }
     }
@@ -217,6 +300,7 @@ class OnboardingViewModel : ViewModel() {
      */
     fun saveInterestTagsAndComplete(onSuccess: () -> Unit) {
         val tagIds = _uiState.value.selectedTagIds.toList()
+        Log.i("ONBOARDING_FLOW", "STEP 3 - 관심사 태그 및 완료 승인 요청: 선택태그ID=$tagIds")
         if (tagIds.isEmpty()) {
             _uiState.update { it.copy(errorMessage = "최소 1개 이상의 태그를 선택해주세요.") }
             return
@@ -226,31 +310,45 @@ class OnboardingViewModel : ViewModel() {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             
             // 1. 태그 목록 저장 PATCH
-            val isTagSaved = repository.updateInterestTags(tagIds)
-            if (!isTagSaved) {
+            val tagSaveError = repository.updateInterestTags(tagIds)
+            if (tagSaveError != null) {
+                Log.e("ONBOARDING_FLOW", "STEP 3 - 관심 태그 저장 PATCH 실패 ❌: $tagSaveError")
                 _uiState.update { 
                     it.copy(
                         isLoading = false,
-                        errorMessage = "관심 태그 저장에 실패했습니다."
+                        errorMessage = tagSaveError // 🌟 서버가 전달해 준 실제 상세 실패 사유 그대로 바인딩!
                     )
                 }
                 return@launch
             }
             
+            Log.i("ONBOARDING_FLOW", "STEP 3 - 관심 태그 저장 PATCH 성공! 🎉 이어서 최종 가입 완료 승인 처리합니다.")
+            
             // 2. 온보딩 완료 처리 POST
-            val completeResponse = repository.completeOnboarding()
+            val completeResult = repository.completeOnboarding()
             _uiState.update { it.copy(isLoading = false) }
             
-            if (completeResponse != null && completeResponse.onboardingCompleted) {
-                _uiState.update { it.copy(isCompleted = true) }
-                onSuccess()
-            } else {
-                _uiState.update { 
-                    it.copy(
-                        errorMessage = "온보딩 최종 처리 도중 오류가 발생했습니다."
-                    )
+            completeResult.fold(
+                onSuccess = { completeResponse ->
+                    if (completeResponse.onboardingCompleted) {
+                        Log.i("ONBOARDING_FLOW", "STEP 3 - 온보딩 완료 POST 성공! 홈 화면으로 전격 진입합니다. 🏆🚀")
+                        _uiState.update { it.copy(isCompleted = true) }
+                        onSuccess()
+                    } else {
+                        Log.e("ONBOARDING_FLOW", "STEP 3 - 최종 완료 POST 거절 ❌ (상태 불일치)")
+                        _uiState.update { 
+                            it.copy(errorMessage = "온보딩 조건이 아직 충족되지 않았습니다. 닉네임과 프로필을 다시 확인해주세요.")
+                        }
+                    }
+                },
+                onFailure = { throwable ->
+                    val errorMsg = throwable.message ?: "온보딩 최종 처리 도중 오류가 발생했습니다."
+                    Log.e("ONBOARDING_FLOW", "STEP 3 - 최종 완료 POST 실패 ❌: $errorMsg")
+                    _uiState.update { 
+                        it.copy(errorMessage = errorMsg) // 🌟 서버가 전달해 준 최종 승인 상세 실패 사유 그대로 바인딩!
+                    }
                 }
-            }
+            )
         }
     }
 
