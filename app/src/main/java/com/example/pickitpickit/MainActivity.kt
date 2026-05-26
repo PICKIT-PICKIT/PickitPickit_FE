@@ -90,11 +90,14 @@ fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: 
     NavHost(navController = rootNavController, startDestination = startRoute) {
         composable("Login") {
             LoginScreen(
-                onLoginSuccess = {
-                    rootNavController.navigate("Onboarding") {
+                onLoginSuccess = { onboardingCompleted ->
+                    // 서버가 알려주는 온보딩 여부로 다음 화면 결정
+                    val destination = if (onboardingCompleted) "Main" else "Onboarding"
+                    rootNavController.navigate(destination) {
                         popUpTo("Login") { inclusive = true }
                     }
-                }
+                },
+                userPreferences = userPreferences
             )
         }
         composable("Onboarding") {
