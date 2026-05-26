@@ -24,6 +24,14 @@ import com.kakao.sdk.common.model.ClientError
 import com.kakao.sdk.common.model.ClientErrorCause
 import com.kakao.sdk.user.UserApiClient
 
+import androidx.compose.foundation.border
+import androidx.compose.material3.Icon
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.tooling.preview.Preview
+import com.example.pickitpickit.ui.theme.PickitPickitTheme
+
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
@@ -31,11 +39,21 @@ fun LoginScreen(
 ) {
     val context = LocalContext.current
 
+    // 배경 그라데이션 브러쉬 (4단 선형 그라데이션)
+    val backgroundBrush = Brush.verticalGradient(
+        colors = listOf(
+            Color(0xFFF2A85A),
+            Color(0xFFFFD790),
+            Color(0xFFFFF3E2),
+            Color(0xFF6B98F8)
+        )
+    )
+
     Column(
         modifier = modifier
             .fillMaxSize()
-            .background(Color.White)
-            .padding(24.dp),
+            .background(brush = backgroundBrush)
+            .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -45,45 +63,45 @@ fun LoginScreen(
             painter = painterResource(id = R.drawable.logo_pikipiki),
             contentDescription = "앱 로고",
             modifier = Modifier
-                .width(180.dp)
-                .height(120.dp)
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .aspectRatio(1.5f)
         )
         
-        Spacer(modifier = Modifier.height(16.dp))
-        
-        Text(
-            text = "당신의 취향을 저격하는\n나만의 랜덤박스 가이드",
-            fontSize = 16.sp,
-            color = Color.Gray,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
-
         Spacer(modifier = Modifier.weight(1f))
 
-        // 임시 카카오 로그인 버튼 UI (실제 이미지 리소스가 있다면 그것으로 대체 가능)
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(54.dp)
-                .clip(RoundedCornerShape(12.dp))
-                .background(Color(0xFFFEE500))
-                .clickable {
-                    handleKakaoLogin(context, onLoginSuccess)
-                },
+                .shadow(elevation = 16.dp, spotColor = Color(0x14000000), ambientColor = Color(0x14000000), shape = RoundedCornerShape(16.dp))
+                .shadow(elevation = 24.dp, spotColor = Color(0x24000000), ambientColor = Color(0x24000000), shape = RoundedCornerShape(16.dp))
+                .width(343.dp)
+                .height(48.dp)
+                .background(color = Color(0xFFFEE500), shape = RoundedCornerShape(16.dp))
+                .clickable { handleKakaoLogin(context, onLoginSuccess) },
             contentAlignment = Alignment.Center
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // 여기에 카카오 심볼 아이콘 추가 가능
+            Row(
+                modifier = Modifier.padding(start = 27.dp, top = 12.dp, end = 27.dp, bottom = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_kakao),
+                    contentDescription = "카카오 아이콘",
+                    tint = Color(0xFF1A1A1A),
+                    modifier = Modifier.size(24.dp)
+                )
+                Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "카카오 로그인",
-                    color = Color.Black,
+                    text = "카카오로 빠르게 시작하기",
+                    color = Color(0xFF1A1A1A),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
         }
         
-        Spacer(modifier = Modifier.height(32.dp))
+        Spacer(modifier = Modifier.height(48.dp))
     }
 }
 
@@ -118,5 +136,13 @@ private fun handleKakaoLogin(context: Context, onLoginSuccess: () -> Unit) {
         }
     } else {
         UserApiClient.instance.loginWithKakaoAccount(context, callback = callback)
+    }
+}
+
+@Preview(showBackground = true, showSystemUi = true)
+@Composable
+fun LoginScreenPreview() {
+    PickitPickitTheme {
+        LoginScreen(onLoginSuccess = {})
     }
 }

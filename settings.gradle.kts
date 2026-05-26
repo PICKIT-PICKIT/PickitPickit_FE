@@ -16,7 +16,10 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // 카카오 로그인 SDK
         maven { url = uri("https://devrepo.kakao.com/nexus/content/groups/public/") }
+        // 카카오맵 SDK (별도 레포 필요)
+        maven { url = uri("https://devrepo.kakao.com/nexus/repository/kakaomap-releases/") }
     }
 }
 
