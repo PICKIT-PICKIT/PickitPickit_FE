@@ -47,9 +47,20 @@ class MapViewModel : ViewModel() {
     private val _registeredTags = MutableStateFlow<List<String>>(listOf("#원피스", "#포켓몬", "#디즈니"))
     val registeredTags: StateFlow<List<String>> = _registeredTags.asStateFlow()
 
+    // 검색 반경 상태 구독 추가
+    private val _searchRadius = MutableStateFlow(1000)
+    val searchRadius: StateFlow<Int> = _searchRadius.asStateFlow()
+
     init {
         // 뷰모델 생성 시 서버에서 최근 검색어 불러오기
         loadRecentSearches()
+        
+        // DataStore 검색 반경 값 동적 구독 연동
+        viewModelScope.launch {
+            userPreferences.searchRadius.collect { radius ->
+                _searchRadius.value = radius
+            }
+        }
     }
 
     /**
@@ -179,10 +190,11 @@ class MapViewModel : ViewModel() {
         _isBottomSheetVisible.value = false
     }
 
-    // 카테고리 + 검색어를 함께 적용한 필터링 결과
+    // 카테고리 + 검색어 + 검색반경(거리단위)을 함께 적용한 필터링 결과
     fun getFilteredStores(): List<StoreItem> {
         val query = _searchQuery.value.trim()
         val category = _selectedCategory.value
+        val radius = _searchRadius.value
 
         return _nearbyStores.value.filter { store ->
             val matchCategory = category == MapCategory.ALL || store.category == category
@@ -190,7 +202,12 @@ class MapViewModel : ViewModel() {
                     store.name.contains(query, ignoreCase = true) ||
                     store.address.contains(query, ignoreCase = true) ||
                     store.tags.any { it.contains(query, ignoreCase = true) }
-            matchCategory && matchQuery
+            
+            // 키워드 검색 시 백엔드 API가 반경 설정을 무시하고 전역 매칭 결과를 반환하므로,
+            // 로컬 필터링 단에서 설정 반경(radius) 이내인 매장만 노출되도록 필터링을 추가 보완합니다.
+            val matchDistance = store.distanceMeters <= radius
+            
+            matchCategory && matchQuery && matchDistance
         }
     }
 }
