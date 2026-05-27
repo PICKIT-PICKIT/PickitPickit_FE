@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -21,6 +22,8 @@ class UserPreferences(private val context: Context) {
     // ──────────────────────────────────────────────────────────────
 
     private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
+    private val PUSH_NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("push_notifications_enabled")
+    private val SEARCH_RADIUS_KEY = intPreferencesKey("search_radius")
 
     // TODO: 백엔드 명세 확인 후 키 이름 변경 가능
     private val ACCESS_TOKEN_KEY  = stringPreferencesKey("access_token")
@@ -28,7 +31,7 @@ class UserPreferences(private val context: Context) {
     private val USER_ID_KEY       = longPreferencesKey("user_id")
 
     // ──────────────────────────────────────────────────────────────
-    // 온보딩 완료 상태
+    // 온보딩 및 설정 상태
     // ──────────────────────────────────────────────────────────────
 
     val isOnboardingCompleted: Flow<Boolean> = context.dataStore.data
@@ -36,6 +39,24 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setOnboardingCompleted(completed: Boolean) {
         context.dataStore.edit { it[ONBOARDING_COMPLETED_KEY] = completed }
+    }
+
+    /** 로컬 푸시 알림 설정 여부 (기본값 true) */
+    val isPushNotificationsEnabled: Flow<Boolean> = context.dataStore.data
+        .map { preferences -> preferences[PUSH_NOTIFICATIONS_ENABLED_KEY] ?: true }
+
+    /** 로컬 푸시 알림 설정 값 변경 */
+    suspend fun setPushNotificationsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[PUSH_NOTIFICATIONS_ENABLED_KEY] = enabled }
+    }
+
+    /** 로컬 검색 반경 설정 (단위: 미터, 기본값 1000m = 1km) */
+    val searchRadius: Flow<Int> = context.dataStore.data
+        .map { preferences -> preferences[SEARCH_RADIUS_KEY] ?: 1000 }
+
+    /** 로컬 검색 반경 설정 변경 */
+    suspend fun setSearchRadius(radius: Int) {
+        context.dataStore.edit { it[SEARCH_RADIUS_KEY] = radius }
     }
 
     // ──────────────────────────────────────────────────────────────

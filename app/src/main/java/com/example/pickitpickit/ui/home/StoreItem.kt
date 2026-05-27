@@ -11,10 +11,12 @@ data class StoreItem(
     val address: String,
     val hours: String,
     val tags: List<String>,
-    val distanceMeters: Int
+    val distanceMeters: Int,
+    val latitude: Double,
+    val longitude: Double
 )
 
-// 더미 데이터 (백엔드 연동 전 UI 테스트용)
+// 더미 데이터 (백엔드 연동 전 UI 테스트용 및 미리보기 프리뷰용)
 val dummyStores = listOf(
     StoreItem(
         id = 1,
@@ -25,7 +27,9 @@ val dummyStores = listOf(
         address = "서울특별시 마포구 양화로 16",
         hours = "10:00 - 23:00",
         tags = listOf("포켓몬", "디즈니", "원피스", "+1"),
-        distanceMeters = 90
+        distanceMeters = 90,
+        latitude = 37.5565,
+        longitude = 126.9235
     ),
     StoreItem(
         id = 2,
@@ -36,7 +40,9 @@ val dummyStores = listOf(
         address = "서울특별시 마포구 홍익로 4",
         hours = "11:00 - 24:00",
         tags = listOf("산리오", "원피스", "짱구", "+1"),
-        distanceMeters = 125
+        distanceMeters = 125,
+        latitude = 37.5570,
+        longitude = 126.9240
     ),
     StoreItem(
         id = 3,
@@ -47,7 +53,9 @@ val dummyStores = listOf(
         address = "서울특별시 마포구 어울마당로 7",
         hours = "10:00 - 23:00",
         tags = listOf("포켓몬", "귀멸의칼날"),
-        distanceMeters = 231
+        distanceMeters = 231,
+        latitude = 37.5560,
+        longitude = 126.9228
     ),
     StoreItem(
         id = 4,
@@ -58,7 +66,9 @@ val dummyStores = listOf(
         address = "서울특별시 마포구 양화로 18",
         hours = "11:00 - 23:00",
         tags = listOf("BT21", "카카오프렌즈"),
-        distanceMeters = 302
+        distanceMeters = 302,
+        latitude = 37.5580,
+        longitude = 126.9250
     ),
     StoreItem(
         id = 5,
@@ -69,6 +79,8 @@ val dummyStores = listOf(
         address = "서울특별시 마포구 와우산로 11",
         hours = "12:00 - 22:00",
         tags = listOf("마블", "디즈니"),
-        distanceMeters = 410
+        distanceMeters = 410,
+        latitude = 37.5550,
+        longitude = 126.9215
     )
 )

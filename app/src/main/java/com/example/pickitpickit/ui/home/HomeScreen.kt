@@ -104,6 +104,9 @@ fun HomeScreen(mapViewModel: MapViewModel) {
                 location?.let {
                     val latLng = LatLng.from(it.latitude, it.longitude)
 
+                    // 주변 매장 API 호출 (현재 위치 & 로컬 저장소 검색반경 자동 매핑)
+                    mapViewModel.loadNearbyStores(it.latitude, it.longitude)
+
                     // 카메라 이동
                     kakaoMapInstance?.moveCamera(
                         CameraUpdateFactory.newCenterPosition(latLng, 15)
@@ -144,6 +147,32 @@ fun HomeScreen(mapViewModel: MapViewModel) {
     // 지도 준비되면 현재 위치로 이동
     LaunchedEffect(kakaoMapInstance) {
         if (kakaoMapInstance != null) moveToCurrentLocation()
+    }
+
+    // 매장 마커들을 보관할 리스트
+    val storeLabels = remember { mutableStateListOf<com.kakao.vectormap.label.Label>() }
+
+    // 매장 목록(filteredStores)이 갱신될 때마다 마커를 지우고 새로 그림
+    LaunchedEffect(filteredStores, kakaoMapInstance) {
+        val map = kakaoMapInstance ?: return@LaunchedEffect
+        val layer = map.labelManager?.layer ?: return@LaunchedEffect
+
+        // 1. 기존 매장 마커 전부 제거
+        storeLabels.forEach { label -> layer.remove(label) }
+        storeLabels.clear()
+
+        // 2. 새 매장 마커 추가
+        val markerBitmap = getBitmapFromDrawable(context, R.drawable.ic_store_marker)
+        filteredStores.forEach { store ->
+            val storeLatLng = LatLng.from(store.latitude, store.longitude)
+            val label = layer.addLabel(
+                LabelOptions.from(storeLatLng)
+                    .setStyles(LabelStyle.from(markerBitmap))
+            )
+            if (label != null) {
+                storeLabels.add(label)
+            }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
