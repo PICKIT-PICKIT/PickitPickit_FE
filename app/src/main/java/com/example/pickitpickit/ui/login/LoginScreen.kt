@@ -17,18 +17,27 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.pickitpickit.R
 import com.example.pickitpickit.core.datastore.UserPreferences
 import com.example.pickitpickit.ui.theme.PickitPickitTheme
+import com.example.pickitpickit.ui.theme.Variables
 import com.kakao.sdk.auth.model.OAuthToken
 import com.kakao.sdk.common.model.ClientError
 import com.kakao.sdk.common.model.ClientErrorCause
@@ -98,6 +107,41 @@ fun LoginScreen(
 
             Spacer(modifier = Modifier.weight(1f))
 
+            // 3초만에 빠른 가입 말풍선
+            Box(
+                modifier = Modifier
+                    .width(216.dp)
+                    .height(41.7687.dp)
+                    .background(color = Color(0xFFFFFFFF), shape = SpeechBubbleShape())
+                    .border(width = 1.5.dp, color = Variables.Blue500, shape = SpeechBubbleShape())
+                    .padding(bottom = 6.dp), // 화살표 높이만큼 아래 여백을 줘서 텍스트 수직 중앙 정렬
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "⚡",
+                        fontSize = 15.sp
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "3초만에 빠른 가입",
+                        color = Color(0xFF1F1F1F),
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "⚡",
+                        fontSize = 15.sp
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
             // 카카오 로그인 버튼
             Box(
                 modifier = Modifier
@@ -145,14 +189,14 @@ fun LoginScreen(
                         Text(
                             text = "카카오로 빠르게 시작하기",
                             color = Color(0xFF1A1A1A),
-                            fontSize = 16.sp,
+                            fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(100.dp))
         }
 
         // 에러 스낵바
@@ -228,3 +272,54 @@ fun LoginScreenPreview() {
         )
     }
 }
+
+class SpeechBubbleShape(
+    private val arrowWidth: Dp = 10.dp,
+    private val arrowHeight: Dp = 6.dp,
+    private val cornerRadius: Dp = 20.dp
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val arrowWidthPx = with(density) { arrowWidth.toPx() }
+        val arrowHeightPx = with(density) { arrowHeight.toPx() }
+        val cornerRadiusPx = with(density) { cornerRadius.toPx() }
+
+        val path = Path().apply {
+            val w = size.width
+            val h = size.height
+            val rectHeight = h - arrowHeightPx
+
+            // Top-left
+            moveTo(cornerRadiusPx, 0f)
+            // Top-right
+            lineTo(w - cornerRadiusPx, 0f)
+            quadraticTo(w, 0f, w, cornerRadiusPx)
+
+            // Right edge
+            lineTo(w, rectHeight - cornerRadiusPx)
+            quadraticTo(w, rectHeight, w - cornerRadiusPx, rectHeight)
+
+            // Bottom edge with arrow pointing down
+            val arrowLeft = (w - arrowWidthPx) / 2f
+            val arrowRight = (w + arrowWidthPx) / 2f
+
+            lineTo(arrowRight, rectHeight)
+            lineTo(w / 2f, h)
+            lineTo(arrowLeft, rectHeight)
+
+            lineTo(cornerRadiusPx, rectHeight)
+            quadraticTo(0f, rectHeight, 0f, rectHeight - cornerRadiusPx)
+
+            // Left edge
+            lineTo(0f, cornerRadiusPx)
+            quadraticTo(0f, 0f, cornerRadiusPx, 0f)
+            close()
+        }
+
+        return Outline.Generic(path)
+    }
+}
+
