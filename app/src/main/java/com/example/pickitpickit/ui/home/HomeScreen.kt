@@ -62,7 +62,10 @@ import com.kakao.vectormap.label.LabelStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(mapViewModel: MapViewModel) {
+fun HomeScreen(
+    mapViewModel: MapViewModel,
+    onStoreClick: (storeId: Int) -> Unit = {}
+) {
     val selectedCategory by mapViewModel.selectedCategory.collectAsState()
     val isBottomSheetVisible by mapViewModel.isBottomSheetVisible.collectAsState()
     val searchQuery by mapViewModel.searchQuery.collectAsState()
@@ -310,7 +313,8 @@ fun HomeScreen(mapViewModel: MapViewModel) {
         ) {
             NearbyStoreBottomSheet(
                 stores = filteredStores,
-                onClose = { mapViewModel.hideBottomSheet() }
+                onClose = { mapViewModel.hideBottomSheet() },
+                onStoreClick = onStoreClick
             )
         }
     }
@@ -682,7 +686,8 @@ fun NearbyRecommendButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
 @Composable
 fun NearbyStoreBottomSheet(
     stores: List<StoreItem>,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onStoreClick: (Int) -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // 핸들
@@ -712,7 +717,10 @@ fun NearbyStoreBottomSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(stores) { store ->
-                StoreListItem(store = store)
+                StoreListItem(
+                    store = store,
+                    onClick = { onStoreClick(store.id) }
+                )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
@@ -723,7 +731,10 @@ fun NearbyStoreBottomSheet(
 // 매장 리스트 아이템
 // ────────────────────────────────────────────────────────────
 @Composable
-fun StoreListItem(store: StoreItem) {
+fun StoreListItem(
+    store: StoreItem,
+    onClick: () -> Unit = {}
+) {
     val categoryLabel = when (store.category) {
         MapCategory.CLAW_MACHINE -> "인형뽑기"
         MapCategory.GACHA -> "가챠"
@@ -738,7 +749,9 @@ fun StoreListItem(store: StoreItem) {
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
