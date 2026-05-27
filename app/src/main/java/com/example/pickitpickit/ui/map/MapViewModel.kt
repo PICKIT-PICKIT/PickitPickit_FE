@@ -24,6 +24,13 @@ class MapViewModel : ViewModel() {
     private var currentLatitude: Double? = null
     private var currentLongitude: Double? = null
 
+    // 현재 위치 공개 StateFlow (StoreDetailViewModel에 전달용)
+    private val _userLatitude = MutableStateFlow<Double?>(null)
+    val userLatitude: StateFlow<Double?> = _userLatitude.asStateFlow()
+
+    private val _userLongitude = MutableStateFlow<Double?>(null)
+    val userLongitude: StateFlow<Double?> = _userLongitude.asStateFlow()
+
     // 카테고리 필터 상태
     private val _selectedCategory = MutableStateFlow(MapCategory.ALL)
     val selectedCategory: StateFlow<MapCategory> = _selectedCategory.asStateFlow()
@@ -69,6 +76,8 @@ class MapViewModel : ViewModel() {
     fun loadNearbyStores(latitude: Double, longitude: Double, type: String = "ALL") {
         currentLatitude = latitude
         currentLongitude = longitude
+        _userLatitude.value = latitude
+        _userLongitude.value = longitude
         viewModelScope.launch {
             // DataStore의 검색 반경 설정을 불러옴
             val radius = userPreferences.searchRadius.firstOrNull() ?: 1000
