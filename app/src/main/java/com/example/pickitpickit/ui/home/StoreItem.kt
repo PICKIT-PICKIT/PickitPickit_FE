@@ -13,7 +13,8 @@ data class StoreItem(
     val tags: List<String>,
     val distanceMeters: Int,
     val latitude: Double,
-    val longitude: Double
+    val longitude: Double,
+    val mainImageUrl: String? = null
 )
 
 // 더미 데이터 (백엔드 연동 전 UI 테스트용 및 미리보기 프리뷰용)

@@ -50,6 +50,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.pickitpickit.R
 import com.example.pickitpickit.ui.map.MapCategory
 import com.example.pickitpickit.ui.map.MapViewModel
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.google.android.gms.location.LocationServices
 import com.kakao.vectormap.KakaoMap
 import com.kakao.vectormap.KakaoMapReadyCallback
@@ -760,14 +762,23 @@ fun StoreListItem(
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 썸네일 (더미)
+            // 썸네일
             Box(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFEEEEEE)),
+                    .background(Color(0xFFF3F4F6)),
                 contentAlignment = Alignment.TopStart
             ) {
+                if (!store.mainImageUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = store.mainImageUrl,
+                        contentDescription = "매장 썸네일",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
                 // 카테고리 뱃지
                 Box(
                     modifier = Modifier

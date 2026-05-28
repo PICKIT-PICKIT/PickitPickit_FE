@@ -32,6 +32,7 @@ import com.example.pickitpickit.ui.mypage.MyPageScreen
 import com.example.pickitpickit.ui.store.StoreDetailScreen
 import com.example.pickitpickit.ui.store.StoreDetailUiState
 import com.example.pickitpickit.ui.store.StoreDetailViewModel
+import com.example.pickitpickit.ui.store.ReviewScreen
 
 @Composable
 fun MainNavGraph(
@@ -140,12 +141,47 @@ fun MainNavGraph(
 
                 // ── 성공 ───────────────────────────────────────────────
                 is StoreDetailUiState.Success -> {
+                    val isReviewSubmitting by storeDetailViewModel.isReviewSubmitting.collectAsState()
+                    val submitResult by storeDetailViewModel.submitResult.collectAsState(initial = null)
+                    val currentUserId by storeDetailViewModel.currentUserId.collectAsState()
+                    val writeGuide by storeDetailViewModel.writeGuide.collectAsState()
+
                     StoreDetailScreen(
                         storeDetail = state.detail,
-                        onBackClick = { navController.popBackStack() }
+                        reviewData = state.reviewData,
+                        onBackClick = { navController.popBackStack() },
+                        onSubmitReview = { rating, difficulty, content ->
+                            storeDetailViewModel.submitReview(rating, difficulty, content)
+                        },
+                        isReviewSubmitting = isReviewSubmitting,
+                        submitResult = submitResult,
+                        currentUserId = currentUserId,
+                        writeGuide = writeGuide,
+                        onEditReview = { reviewId, rating, difficulty, content ->
+                            storeDetailViewModel.editReview(reviewId, rating, difficulty, content)
+                        },
+                        onDeleteReview = { reviewId ->
+                            storeDetailViewModel.removeReview(reviewId)
+                        }
                     )
                 }
             }
+        }
+        composable(
+            route = "review/{storeId}?storeName={storeName}",
+            arguments = listOf(
+                navArgument("storeId") { type = NavType.LongType },
+                navArgument("storeName") { type = NavType.StringType; nullable = true }
+            )
+        ) { backStackEntry ->
+            val storeId = backStackEntry.arguments?.getLong("storeId") ?: return@composable
+            val storeName = backStackEntry.arguments?.getString("storeName") ?: "매장"
+
+            ReviewScreen(
+                storeId = storeId,
+                storeName = storeName,
+                onBackClick = { navController.popBackStack() }
+            )
         }
     }
 }
