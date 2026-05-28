@@ -8,11 +8,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.animateContentSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,15 +29,21 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.pickitpickit.core.model.ProductDto
+import com.example.pickitpickit.core.model.ReviewDto
 import com.example.pickitpickit.core.model.StoreDetailDto
 import com.example.pickitpickit.core.model.StoreDetailResponse
+import com.example.pickitpickit.core.model.StoreReviewListResponse
 import com.example.pickitpickit.core.model.TagDto
 import com.example.pickitpickit.ui.theme.PickitPickitTheme
 
@@ -41,9 +54,34 @@ import com.example.pickitpickit.ui.theme.PickitPickitTheme
 @Composable
 fun StoreDetailScreen(
     storeDetail: StoreDetailResponse,
-    onBackClick: () -> Unit
+    reviewData: StoreReviewListResponse?,
+    onBackClick: () -> Unit,
+    onSubmitReview: (Double, Int, String?) -> Unit,
+    isReviewSubmitting: Boolean,
+    submitResult: String?,
+    currentUserId: Long?,
+    writeGuide: com.example.pickitpickit.core.model.ReviewWriteGuideResponse?,
+    onEditReview: (Long, Double, Int, String?) -> Unit,
+    onDeleteReview: (Long) -> Unit
 ) {
     val store = storeDetail.store
+    var showWriteDialog by remember { mutableStateOf(false) }
+    var editingReview by remember { mutableStateOf<ReviewDto?>(null) }
+    var reviewToDelete by remember { mutableStateOf<Long?>(null) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    LaunchedEffect(submitResult) {
+        submitResult?.let { result ->
+            if (result.isEmpty()) {
+                android.widget.Toast.makeText(context, "성공적으로 반영되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                showWriteDialog = false
+                editingReview = null
+                reviewToDelete = null
+            } else {
+                android.widget.Toast.makeText(context, result, android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
 
     // 페이지네이션 상태 (상품 목록 페이지)
     var currentPage by remember { mutableIntStateOf(1) }
@@ -124,6 +162,94 @@ fun StoreDetailScreen(
         item {
             TipBox()
         }
+
+        // ── 8. 리뷰 목록 헤더 ─────────────────────────────────────
+        item {
+            ReviewSectionHeader(
+                reviewCount = reviewData?.reviewCount ?: 0,
+                onWriteClick = { showWriteDialog = true }
+            )
+        }
+
+        // ── 9. 리뷰 리스트 or 빈 상태 ─────────────────────────────
+        if (reviewData == null || reviewData.reviews.isEmpty()) {
+            item {
+                ReviewEmptyCard()
+            }
+        } else {
+            items(reviewData.reviews) { review ->
+                ReviewListItemCard(
+                    review = review,
+                    currentUserId = currentUserId,
+                    onEditClick = { editingReview = review },
+                    onDeleteClick = { reviewToDelete = review.reviewId }
+                )
+            }
+        }
+    }
+
+    if (showWriteDialog || editingReview != null) {
+        StoreReviewWriteDialog(
+            storeName = store.name,
+            reviewToEdit = editingReview,
+            writeGuide = writeGuide,
+            onDismiss = {
+                showWriteDialog = false
+                editingReview = null
+            },
+            onSubmit = { rating, difficulty, content ->
+                if (editingReview != null) {
+                    onEditReview(editingReview!!.reviewId, rating, difficulty, content)
+                } else {
+                    onSubmitReview(rating, difficulty, content)
+                }
+            },
+            isSubmitting = isReviewSubmitting
+        )
+    }
+
+    if (reviewToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { reviewToDelete = null },
+            title = {
+                Text(
+                    text = "리뷰 삭제",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF1A1A2E)
+                )
+            },
+            text = {
+                Text(
+                    text = "작성하신 리뷰를 정말로 삭제하시겠습니까?\n삭제된 리뷰는 복구할 수 없습니다.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        reviewToDelete?.let { onDeleteReview(it) }
+                        reviewToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("삭제", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { reviewToDelete = null },
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFD1D5DB))
+                ) {
+                    Text("취소", color = Color(0xFF4B5563))
+                }
+            },
+            containerColor = Color.White,
+            properties = DialogProperties(usePlatformDefaultWidth = true)
+        )
     }
 }
 
@@ -766,6 +892,635 @@ private fun TipBox() {
 }
 
 // ──────────────────────────────────────────────────────────────
+// 리뷰 요약 및 리스트 컴포넌트들
+// ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun ReviewSectionHeader(
+    reviewCount: Int,
+    onWriteClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "⭐ 리뷰",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = Color(0xFF1A1A2E)
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color(0xFFEEF2FF)) // 연한 보라/블루 톤
+                    .padding(horizontal = 8.dp, vertical = 2.dp)
+            ) {
+                Text(
+                    text = "${reviewCount}개",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF3B6EF8)
+                )
+            }
+        }
+
+        // 리뷰 작성 버튼 (프리미엄 노란색/오렌지 버튼)
+        Button(
+            onClick = onWriteClick,
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFFFB300)
+            ),
+            shape = RoundedCornerShape(12.dp),
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+        ) {
+            Text(
+                text = "⭐ 리뷰 작성",
+                fontSize = 13.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A2E)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewEmptyCard() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 48.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // 말풍선 아이콘 컨테이너 (제공된 시안과 완벽한 일치)
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFEEF2FF)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "💬",
+                    fontSize = 42.sp
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "아직 리뷰가 없어요",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A2E)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "첫 번째 리뷰를 남겨보세요!",
+                fontSize = 13.sp,
+                color = Color(0xFF999999)
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReviewListItemCard(
+    review: ReviewDto,
+    currentUserId: Long?,
+    onEditClick: () -> Unit,
+    onDeleteClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // 작성자 프로필 & 별점
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!review.authorProfileImageUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = review.authorProfileImageUrl,
+                        contentDescription = "프로필 이미지",
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF3F4F6)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("👤", fontSize = 16.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = review.authorNickname,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A2E)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = review.createdAt.split("T").firstOrNull() ?: review.createdAt,
+                            fontSize = 11.sp,
+                            color = Color(0xFF9CA3AF)
+                        )
+                        if (review.userId == currentUserId) {
+                            Text(
+                                text = " • ",
+                                fontSize = 11.sp,
+                                color = Color(0xFF9CA3AF)
+                            )
+                            Text(
+                                text = "수정",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF6B7280),
+                                modifier = Modifier.clickable { onEditClick() }
+                            )
+                            Text(
+                                text = " | ",
+                                fontSize = 11.sp,
+                                color = Color(0xFFD1D5DB)
+                            )
+                            Text(
+                                text = "삭제",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFEF4444),
+                                modifier = Modifier.clickable { onDeleteClick() }
+                            )
+                        }
+                    }
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFFCA28),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(3.dp))
+                    Text(
+                        text = String.format("%.1f", review.rating),
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A2E)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 난이도 태그
+            val tagColor = when (review.difficulty) {
+                in 1..2 -> Color(0xFF10B981) // 쉬움 (초록)
+                3 -> Color(0xFF3B82F6)      // 보통 (파랑)
+                else -> Color(0xFFEF4444)    // 어려움 (빨강)
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(tagColor.copy(alpha = 0.1f))
+                    .padding(horizontal = 8.dp, vertical = 3.dp)
+            ) {
+                Text(
+                    text = "난이도: ${review.difficultyLabel ?: "보통"}",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = tagColor
+                )
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (!review.content.isNullOrEmpty()) {
+                Text(
+                    text = review.content,
+                    fontSize = 13.sp,
+                    color = Color(0xFF374151),
+                    lineHeight = 20.sp
+                )
+            }
+
+            if (!review.imageUrl.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                AsyncImage(
+                    model = review.imageUrl,
+                    contentDescription = "리뷰 이미지",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp)
+                        .clip(RoundedCornerShape(12.dp)),
+                    contentScale = ContentScale.Crop
+                )
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun StoreReviewWriteDialog(
+    storeName: String,
+    reviewToEdit: ReviewDto? = null,
+    writeGuide: com.example.pickitpickit.core.model.ReviewWriteGuideResponse? = null,
+    onDismiss: () -> Unit,
+    onSubmit: (Double, Int, String?) -> Unit,
+    isSubmitting: Boolean
+) {
+    var rating by remember(reviewToEdit) { mutableDoubleStateOf(reviewToEdit?.rating ?: 5.0) }
+    var difficulty by remember(reviewToEdit) { mutableIntStateOf(reviewToEdit?.difficulty ?: 3) } // 보통 기본값
+    var content by remember(reviewToEdit) { mutableStateOf(reviewToEdit?.content ?: "") }
+    val contentCharLimit = 200
+
+    val scrollState = rememberScrollState()
+
+    Dialog(
+        onDismissRequest = { if (!isSubmitting) onDismiss() },
+        properties = DialogProperties(
+            dismissOnBackPress = !isSubmitting,
+            dismissOnClickOutside = !isSubmitting,
+            usePlatformDefaultWidth = false
+        )
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.85f)
+                .padding(vertical = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+            ) {
+                // 상단 X 닫기 버튼 영역
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    IconButton(
+                        onClick = onDismiss,
+                        enabled = !isSubmitting,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Text("✕", fontSize = 16.sp, color = Color(0xFF9CA3AF))
+                    }
+                }
+
+                // 스크롤 가능한 본문 영역
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = if (reviewToEdit != null) "✏️ 매장 리뷰 수정" else "⭐ 매장 리뷰 작성",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A2E)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "${storeName}을(를) 방문하셨나요? 경험을 공유해주세요!",
+                        fontSize = 13.sp,
+                        color = Color(0xFF3B6EF8),
+                        fontWeight = FontWeight.SemiBold,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 18.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Text(
+                        text = "매장은 어떠셨나요?",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF374151)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        for (i in 1..5) {
+                            val starRating = i.toDouble()
+                            val isSelected = starRating <= rating
+                            Icon(
+                                imageVector = Icons.Default.Star,
+                                contentDescription = "별점 $i",
+                                tint = if (isSelected) Color(0xFFFFCA28) else Color(0xFFE5E7EB),
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clickable(enabled = !isSubmitting) {
+                                        rating = starRating
+                                    }
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = "매장 인형뽑기/가챠 체감 난이도는?",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF374151)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val difficulties = listOf(
+                            Triple(1, "쉬움 😊", Color(0xFF10B981)),
+                            Triple(3, "보통 😐", Color(0xFF3B82F6)),
+                            Triple(5, "어려움 😅", Color(0xFFEF4444))
+                        )
+
+                        difficulties.forEach { (value, label, color) ->
+                            val isSelected = difficulty == value
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(38.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (isSelected) color.copy(alpha = 0.15f) else Color(0xFFF3F4F6)
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) color else Color.Transparent,
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable(enabled = !isSubmitting) {
+                                        difficulty = value
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) color else Color(0xFF4B5563)
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = "한 줄 평가 (선택사항)",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF374151)
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextField(
+                        value = content,
+                        onValueChange = {
+                            if (it.length <= contentCharLimit) {
+                                content = it
+                            }
+                        },
+                        placeholder = {
+                            Text(
+                                text = "다른 사용자들에게 도움이 될 내용을 남겨주세요!",
+                                fontSize = 12.sp,
+                                color = Color(0xFF9CA3AF)
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(100.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF9FAFB),
+                            unfocusedContainerColor = Color(0xFFF9FAFB),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF1F2937)),
+                        maxLines = 4,
+                        enabled = !isSubmitting
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "${content.length}/$contentCharLimit",
+                        fontSize = 11.sp,
+                        color = Color(0xFF9CA3AF),
+                        modifier = Modifier.align(Alignment.End)
+                    )
+
+                    // ── 💡 가이드 아코디언 카드 영역 ──────────────────
+                    if (writeGuide != null) {
+                        var isGuideExpanded by remember { mutableStateOf(false) }
+
+                        LaunchedEffect(isGuideExpanded) {
+                            if (isGuideExpanded) {
+                                // 레이아웃 확장 애니메이션(animateContentSize) 시간에 맞춰 부드럽게 하단 자동 스크롤
+                                kotlinx.coroutines.delay(150)
+                                scrollState.animateScrollTo(scrollState.maxValue)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateContentSize(),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF9FAFB)),
+                            border = BorderStroke(1.dp, Color(0xFFE5E7EB))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .clickable { isGuideExpanded = !isGuideExpanded }
+                                    .padding(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(text = "💡", fontSize = 14.sp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "리뷰 작성 가이드 꿀팁",
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFF4B5563)
+                                        )
+                                    }
+                                    Icon(
+                                        imageVector = if (isGuideExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                        contentDescription = null,
+                                        tint = Color(0xFF9CA3AF),
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+
+                                if (isGuideExpanded) {
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Spacer(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(1.dp)
+                                            .background(Color(0xFFE5E7EB))
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    // 후기 가이드
+                                    val reviewG = writeGuide.reviewGuide
+                                    Text(
+                                        text = "📝 ${reviewG.title}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFFB300)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    reviewG.messages.forEach { msg ->
+                                        Text(
+                                            text = "• $msg",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF4B5563),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = 6.dp, bottom = 2.dp),
+                                            textAlign = TextAlign.Start
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(10.dp))
+
+                                    // 자랑하기 가이드
+                                    val bragG = writeGuide.bragGuide
+                                    Text(
+                                        text = "📸 ${bragG.title}",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFFB300)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    bragG.messages.forEach { msg ->
+                                        Text(
+                                            text = "• $msg",
+                                            fontSize = 11.sp,
+                                            color = Color(0xFF4B5563),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = 6.dp, bottom = 2.dp),
+                                            textAlign = TextAlign.Start
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 하단 취소 / 등록 버튼 영역
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        enabled = !isSubmitting,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF6B7280)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                    ) {
+                        Text("취소", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    Button(
+                        onClick = {
+                            onSubmit(rating, difficulty, content.ifBlank { null })
+                        },
+                        enabled = !isSubmitting,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFB300)),
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(46.dp)
+                    ) {
+                        if (isSubmitting) {
+                            CircularProgressIndicator(color = Color(0xFF1A1A2E), modifier = Modifier.size(20.dp))
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                if (reviewToEdit != null) {
+                                    Text("✏️ ", fontSize = 14.sp, color = Color(0xFF1A1A2E))
+                                    Text("리뷰 수정", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
+                                } else {
+                                    Text("✈ ", fontSize = 14.sp, color = Color(0xFF1A1A2E))
+                                    Text("리뷰 등록", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF1A1A2E))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────
 // Preview
 // ──────────────────────────────────────────────────────────────
 
@@ -832,6 +1587,17 @@ fun StoreDetailScreenPreview() {
             tags = listOf(TagDto(1L, "24시간"), TagDto(2L, "혜자샵")),
             products = dummyProducts
         )
-        StoreDetailScreen(storeDetail = dummyStore, onBackClick = {})
+        StoreDetailScreen(
+            storeDetail = dummyStore,
+            reviewData = null,
+            onBackClick = {},
+            onSubmitReview = { _, _, _ -> },
+            isReviewSubmitting = false,
+            submitResult = null,
+            currentUserId = null,
+            writeGuide = null,
+            onEditReview = { _, _, _, _ -> },
+            onDeleteReview = {}
+        )
     }
 }

@@ -3,6 +3,9 @@ package com.example.pickitpickit.core.network
 import android.util.Log
 import com.example.pickitpickit.ui.home.StoreItem
 import com.example.pickitpickit.ui.map.MapCategory
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 class StoreRepository {
 
@@ -32,34 +35,47 @@ class StoreRepository {
                 val dtoList = response.body()!!.data ?: emptyList()
                 Log.i("STORE_REPO", "주변 매장 조회 성공: ${dtoList.size}건 수신 (radius: ${radius}m)")
                 
-                dtoList.map { dto ->
-                    // DTO에서 StoreItem으로 매핑
-                    val mappedCategory = when (dto.type.uppercase()) {
-                        "CLAW" -> MapCategory.CLAW_MACHINE
-                        "GACHA" -> MapCategory.GACHA
-                        else -> MapCategory.MIXED
-                    }
+                val reviewRepository = ReviewRepository()
+                
+                coroutineScope {
+                    val deferredStores = dtoList.map { dto ->
+                        async {
+                            val mappedCategory = when (dto.type.uppercase()) {
+                                "CLAW" -> MapCategory.CLAW_MACHINE
+                                "GACHA" -> MapCategory.GACHA
+                                else -> MapCategory.MIXED
+                            }
 
-                    // 기본 태그 구성 (매장 타입에 부합하도록)
-                    val defaultTags = when (dto.type.uppercase()) {
-                        "CLAW" -> listOf("인형뽑기", "크레인게임")
-                        "GACHA" -> listOf("가챠", "캡슐토이", "피규어")
-                        else -> listOf("인형뽑기", "가챠", "종합샵")
-                    }
+                            // 1. 리뷰 데이터 비동기 조회 (실제 평점 및 리뷰 개수 연동)
+                            val reviewData = reviewRepository.getStoreReviews(dto.id.toLong())
+                            val realRating = reviewData?.averageRating?.toFloat() ?: 0.0f
+                            val realReviewCount = reviewData?.reviewCount ?: 0
 
-                    StoreItem(
-                        id = dto.id,
-                        name = dto.name,
-                        category = mappedCategory,
-                        rating = 4.5f, // API에 평점 정보 부재하므로 기본값
-                        reviewCount = 10, // API에 리뷰 개수 정보 부재하므로 기본값
-                        address = dto.address ?: "주소 정보 없음",
-                        hours = dto.businessHours ?: "영업시간 정보 없음",
-                        tags = defaultTags,
-                        distanceMeters = dto.distance,
-                        latitude = dto.latitude,
-                        longitude = dto.longitude
-                    )
+                            // 2. 매장 상세 정보 비동기 조회를 통해 실제 등록된 태그 수신
+                            val detailData = getStoreDetail(dto.id.toLong(), lat, lng)
+                            val realTags = detailData?.tags?.map { it.name } ?: when (dto.type.uppercase()) {
+                                "CLAW" -> listOf("인형뽑기", "크레인게임")
+                                "GACHA" -> listOf("가챠", "캡슐토이", "피규어")
+                                else -> listOf("인형뽑기", "가챠", "종합샵")
+                            }
+
+                            StoreItem(
+                                id = dto.id,
+                                name = dto.name,
+                                category = mappedCategory,
+                                rating = realRating,
+                                reviewCount = realReviewCount,
+                                address = dto.address ?: "주소 정보 없음",
+                                hours = dto.businessHours ?: "영업시간 정보 없음",
+                                tags = realTags,
+                                distanceMeters = dto.distance,
+                                latitude = dto.latitude,
+                                longitude = dto.longitude,
+                                mainImageUrl = dto.mainImageUrl
+                            )
+                        }
+                    }
+                    deferredStores.awaitAll()
                 }
             } else {
                 Log.w("STORE_REPO", "주변 매장 조회 실패: ${response.body()?.message}")
@@ -133,32 +149,47 @@ class StoreRepository {
                 val dtoList = response.body()!!.data ?: emptyList()
                 Log.i("STORE_REPO", "매장 검색 성공: ${dtoList.size}건 수신 (keyword: $keyword)")
 
-                dtoList.map { dto ->
-                    val mappedCategory = when (dto.type.uppercase()) {
-                        "CLAW" -> MapCategory.CLAW_MACHINE
-                        "GACHA" -> MapCategory.GACHA
-                        else -> MapCategory.MIXED
-                    }
+                val reviewRepository = ReviewRepository()
 
-                    val defaultTags = when (dto.type.uppercase()) {
-                        "CLAW" -> listOf("인형뽑기", "크레인게임")
-                        "GACHA" -> listOf("가챠", "캡슐토이", "피규어")
-                        else -> listOf("인형뽑기", "가챠", "종합샵")
-                    }
+                coroutineScope {
+                    val deferredStores = dtoList.map { dto ->
+                        async {
+                            val mappedCategory = when (dto.type.uppercase()) {
+                                "CLAW" -> MapCategory.CLAW_MACHINE
+                                "GACHA" -> MapCategory.GACHA
+                                else -> MapCategory.MIXED
+                            }
 
-                    StoreItem(
-                        id = dto.id,
-                        name = dto.name,
-                        category = mappedCategory,
-                        rating = 4.5f,
-                        reviewCount = 10,
-                        address = dto.address ?: "주소 정보 없음",
-                        hours = dto.businessHours ?: "영업시간 정보 없음",
-                        tags = defaultTags,
-                        distanceMeters = dto.distance,
-                        latitude = dto.latitude,
-                        longitude = dto.longitude
-                    )
+                            // 1. 리뷰 데이터 비동기 조회 (실제 평점 및 리뷰 개수 연동)
+                            val reviewData = reviewRepository.getStoreReviews(dto.id.toLong())
+                            val realRating = reviewData?.averageRating?.toFloat() ?: 0.0f
+                            val realReviewCount = reviewData?.reviewCount ?: 0
+
+                            // 2. 매장 상세 정보 비동기 조회를 통해 실제 등록된 태그 수신
+                            val detailData = getStoreDetail(dto.id.toLong(), lat, lng)
+                            val realTags = detailData?.tags?.map { it.name } ?: when (dto.type.uppercase()) {
+                                "CLAW" -> listOf("인형뽑기", "크레인게임")
+                                "GACHA" -> listOf("가챠", "캡슐토이", "피규어")
+                                else -> listOf("인형뽑기", "가챠", "종합샵")
+                            }
+
+                            StoreItem(
+                                id = dto.id,
+                                name = dto.name,
+                                category = mappedCategory,
+                                rating = realRating,
+                                reviewCount = realReviewCount,
+                                address = dto.address ?: "주소 정보 없음",
+                                hours = dto.businessHours ?: "영업시간 정보 없음",
+                                tags = realTags,
+                                distanceMeters = dto.distance,
+                                latitude = dto.latitude,
+                                longitude = dto.longitude,
+                                mainImageUrl = dto.mainImageUrl
+                            )
+                        }
+                    }
+                    deferredStores.awaitAll()
                 }
             } else {
                 Log.w("STORE_REPO", "매장 검색 실패: ${response.body()?.message}")
