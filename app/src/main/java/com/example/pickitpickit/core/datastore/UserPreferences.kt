@@ -23,10 +23,7 @@ class UserPreferences(private val context: Context) {
 
     private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
     private val PUSH_NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("push_notifications_enabled")
-<<<<<<< HEAD
-=======
     private val SEARCH_RADIUS_KEY = intPreferencesKey("search_radius")
->>>>>>> dev
 
     // TODO: 백엔드 명세 확인 후 키 이름 변경 가능
     private val ACCESS_TOKEN_KEY  = stringPreferencesKey("access_token")

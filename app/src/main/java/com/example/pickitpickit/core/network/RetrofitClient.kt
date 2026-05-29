@@ -5,6 +5,7 @@ import com.example.pickitpickit.core.network.api.SearchApi
 import com.example.pickitpickit.core.network.api.OnboardingApi
 import com.example.pickitpickit.core.network.api.StoreApi
 import com.example.pickitpickit.core.network.api.ReviewApi
+import com.example.pickitpickit.core.network.api.UserApi
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -66,4 +67,5 @@ object RetrofitClient {
     val onboardingApi: OnboardingApi by lazy { retrofit.create(OnboardingApi::class.java) }
     val storeApi: StoreApi by lazy { retrofit.create(StoreApi::class.java) }
     val reviewApi: ReviewApi by lazy { retrofit.create(ReviewApi::class.java) }
+    val userApi: UserApi by lazy { retrofit.create(UserApi::class.java) }
 }

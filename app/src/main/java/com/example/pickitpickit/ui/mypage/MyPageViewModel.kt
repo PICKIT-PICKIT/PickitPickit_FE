@@ -3,9 +3,11 @@ package com.example.pickitpickit.ui.mypage
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.pickitpickit.GlobalApplication
 import com.example.pickitpickit.core.model.DefaultProfileImageResponse
 import com.example.pickitpickit.core.model.InterestTagResponse
-import com.example.pickitpickit.core.network.OnboardingRepository
+import com.example.pickitpickit.core.model.MyPageProfileUpdateRequest
+import com.example.pickitpickit.core.network.UserRepository
 import com.kakao.sdk.user.UserApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -39,7 +41,7 @@ data class MyPageState(
 )
 
 class MyPageViewModel : ViewModel() {
-    private val repository = OnboardingRepository()
+    private val userRepository = UserRepository()
 
     private val _uiState = MutableStateFlow(MyPageState())
     val uiState: StateFlow<MyPageState> = _uiState.asStateFlow()
@@ -52,57 +54,62 @@ class MyPageViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             
-            // 6종 고품질 로컬 Unsplash 기본 이미지 리스트 정의 (OnboardingViewModel과 통일)
-            val defaultUnsplashImages = listOf(
-                DefaultProfileImageResponse("1", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"),
-                DefaultProfileImageResponse("2", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"),
-                DefaultProfileImageResponse("3", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80"),
-                DefaultProfileImageResponse("4", "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80"),
-                DefaultProfileImageResponse("5", "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80"),
-                DefaultProfileImageResponse("6", "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80")
-            )
-
-            val status = repository.getOnboardingStatus()
-            val imagesOption = repository.getProfileImages()
-            var tags = repository.getInterestTags()
-
-            if (tags.isEmpty()) {
-                tags = listOf(
-                    InterestTagResponse(1L, "포켓몬"),
-                    InterestTagResponse(2L, "디즈니"),
-                    InterestTagResponse(3L, "원피스"),
-                    InterestTagResponse(4L, "산리오"),
-                    InterestTagResponse(5L, "마블"),
-                    InterestTagResponse(6L, "BT21"),
-                    InterestTagResponse(7L, "짱구"),
-                    InterestTagResponse(8L, "팬텀"),
-                    InterestTagResponse(9L, "귀멸의칼날"),
-                    InterestTagResponse(10L, "나루토"),
-                    InterestTagResponse(11L, "카카오"),
-                    InterestTagResponse(12L, "지브리"),
-                    InterestTagResponse(13L, "메이플"),
-                    InterestTagResponse(14L, "스누피"),
-                    InterestTagResponse(15L, "드래곤볼")
+            val profile = userRepository.getProfile()
+            if (profile != null) {
+                // Map MyPageInterestTag to InterestTagResponse
+                val selectedTags = profile.interestTags.filter { it.selected }.map { InterestTagResponse(it.id, it.name) }
+                val availableTags = profile.interestTags.map { InterestTagResponse(it.id, it.name) }
+                
+                // 6종 고품질 로컬 Unsplash 기본 이미지 리스트 정의 (온보딩 및 기존 설정과 호환)
+                val defaultUnsplashImages = listOf(
+                    DefaultProfileImageResponse("1", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"),
+                    DefaultProfileImageResponse("2", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"),
+                    DefaultProfileImageResponse("3", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=300&q=80"),
+                    DefaultProfileImageResponse("4", "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=300&q=80"),
+                    DefaultProfileImageResponse("5", "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=300&q=80"),
+                    DefaultProfileImageResponse("6", "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=300&q=80")
                 )
-            }
 
-            if (status != null) {
-                val finalImagesOption = com.example.pickitpickit.core.model.ProfileImageOptionsResponse(
-                    kakaoProfileImageUrl = imagesOption?.kakaoProfileImageUrl ?: status.kakaoProfileImageUrl,
-                    defaultImages = defaultUnsplashImages
-                )
+                // Map MyPageDefaultImage to DefaultProfileImageResponse with fallback
+                val defaultImages = defaultUnsplashImages
+
+
+                val backendDefaultImages = if (!profile.defaultProfileImages.isNullOrEmpty()) {
+                    profile.defaultProfileImages.map { DefaultProfileImageResponse(it.id, it.imageUrl) }
+                } else {
+                    listOf(
+                        "/images/default1.png",
+                        "/images/default2.png",
+                        "/images/default3.png",
+                        "/images/default4.png",
+                        "/images/default5.png",
+                        "/images/default6.png"
+                    ).mapIndexed { idx, url -> DefaultProfileImageResponse((idx + 1).toString(), url) }
+                }
+
+                val resolvedProfileImageUrl = if (profile.profileImageType == "DEFAULT") {
+                    val serverUrlOrId = profile.profileImageUrl
+                    val index = backendDefaultImages.indexOfFirst { it.imageUrl == serverUrlOrId || it.id == serverUrlOrId }
+                    if (index in 0 until defaultImages.size) {
+                        defaultImages[index].imageUrl
+                    } else {
+                        profile.profileImageUrl ?: (defaultImages.firstOrNull()?.imageUrl)
+                    }
+                } else {
+                    profile.profileImageUrl ?: profile.kakaoProfileImageUrl ?: (defaultImages.firstOrNull()?.imageUrl)
+                }
 
                 _uiState.update { currentState ->
                     currentState.copy(
-                        nickname = status.nickname ?: "",
-                        profileImageUrl = status.profileImageUrl ?: (finalImagesOption.defaultImages.firstOrNull()?.imageUrl),
-                        profileImageType = status.profileImageType ?: "DEFAULT",
-                        selectedTags = status.selectedTags,
-                        userId = status.userId,
-                        kakaoProfileImageUrl = finalImagesOption.kakaoProfileImageUrl,
-                        defaultProfileImages = finalImagesOption.defaultImages,
-                        backendDefaultProfileImages = imagesOption?.defaultImages ?: emptyList(),
-                        availableTags = tags,
+                        nickname = profile.nickname,
+                        profileImageUrl = resolvedProfileImageUrl,
+                        profileImageType = profile.profileImageType,
+                        selectedTags = selectedTags,
+                        userId = profile.userId,
+                        kakaoProfileImageUrl = profile.kakaoProfileImageUrl,
+                        defaultProfileImages = defaultImages,
+                        backendDefaultProfileImages = backendDefaultImages,
+                        availableTags = availableTags,
                         isLoading = false
                     )
                 }
@@ -243,30 +250,41 @@ class MyPageViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             
-            // 1. Update Nickname
-            val nicknameError = repository.updateNickname(finalNickname)
-            if (nicknameError != null) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = nicknameError) }
-                return@launch
+            val request = MyPageProfileUpdateRequest(
+                nickname = finalNickname,
+                profileImageType = type,
+                profileImageUrl = backendUrl,
+                interestTagIds = tagIds
+            )
+            
+            val updateError = userRepository.updateProfile(request)
+            if (updateError != null) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = updateError) }
+            } else {
+                // Reload profile data to synchronize
+                loadUserProfile()
+                onSuccess()
             }
+        }
+    }
 
-            // 2. Update Profile Image
-            val imageSuccess = repository.updateProfileImage(type, backendUrl)
-            if (!imageSuccess) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = "프로필 이미지 저장에 실패했습니다.") }
-                return@launch
+    /**
+     * 회원 탈퇴 처리 및 로컬 데이터 초기화
+     */
+    fun deleteAccount(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            
+            val deleteError = userRepository.deleteAccount()
+            if (deleteError != null) {
+                _uiState.update { it.copy(isLoading = false, errorMessage = deleteError) }
+            } else {
+                // 로컬 세션 토큰 및 설정 캐시 전면 초기화
+                GlobalApplication.userPreferences.clearTokens()
+                GlobalApplication.userPreferences.clearAll()
+                _uiState.update { MyPageState() } // 상태 리셋
+                onSuccess()
             }
-
-            // 3. Update Tags
-            val tagsError = repository.updateInterestTags(tagIds)
-            if (tagsError != null) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = tagsError) }
-                return@launch
-            }
-
-            // Reload profile data to synchronize
-            loadUserProfile()
-            onSuccess()
         }
     }
 
