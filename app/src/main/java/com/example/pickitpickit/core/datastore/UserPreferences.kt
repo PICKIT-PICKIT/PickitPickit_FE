@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -22,6 +23,10 @@ class UserPreferences(private val context: Context) {
 
     private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
     private val PUSH_NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("push_notifications_enabled")
+<<<<<<< HEAD
+=======
+    private val SEARCH_RADIUS_KEY = intPreferencesKey("search_radius")
+>>>>>>> dev
 
     // TODO: 백엔드 명세 확인 후 키 이름 변경 가능
     private val ACCESS_TOKEN_KEY  = stringPreferencesKey("access_token")
@@ -48,6 +53,14 @@ class UserPreferences(private val context: Context) {
         context.dataStore.edit { it[PUSH_NOTIFICATIONS_ENABLED_KEY] = enabled }
     }
 
+    /** 로컬 검색 반경 설정 (단위: 미터, 기본값 1000m = 1km) */
+    val searchRadius: Flow<Int> = context.dataStore.data
+        .map { preferences -> preferences[SEARCH_RADIUS_KEY] ?: 1000 }
+
+    /** 로컬 검색 반경 설정 변경 */
+    suspend fun setSearchRadius(radius: Int) {
+        context.dataStore.edit { it[SEARCH_RADIUS_KEY] = radius }
+    }
     // ──────────────────────────────────────────────────────────────
     // JWT 토큰 저장 / 읽기 / 삭제
     // ──────────────────────────────────────────────────────────────

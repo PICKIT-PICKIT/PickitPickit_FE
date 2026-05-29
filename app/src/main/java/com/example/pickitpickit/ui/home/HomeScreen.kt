@@ -50,6 +50,8 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.pickitpickit.R
 import com.example.pickitpickit.ui.map.MapCategory
 import com.example.pickitpickit.ui.map.MapViewModel
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.google.android.gms.location.LocationServices
 import com.kakao.vectormap.KakaoMap
 import com.kakao.vectormap.KakaoMapReadyCallback
@@ -62,7 +64,10 @@ import com.kakao.vectormap.label.LabelStyle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(mapViewModel: MapViewModel) {
+fun HomeScreen(
+    mapViewModel: MapViewModel,
+    onStoreClick: (storeId: Int) -> Unit = {}
+) {
     val selectedCategory by mapViewModel.selectedCategory.collectAsState()
     val isBottomSheetVisible by mapViewModel.isBottomSheetVisible.collectAsState()
     val searchQuery by mapViewModel.searchQuery.collectAsState()
@@ -104,6 +109,9 @@ fun HomeScreen(mapViewModel: MapViewModel) {
                 location?.let {
                     val latLng = LatLng.from(it.latitude, it.longitude)
 
+                    // 주변 매장 API 호출 (현재 위치 & 로컬 저장소 검색반경 자동 매핑)
+                    mapViewModel.loadNearbyStores(it.latitude, it.longitude)
+
                     // 카메라 이동
                     kakaoMapInstance?.moveCamera(
                         CameraUpdateFactory.newCenterPosition(latLng, 15)
@@ -144,6 +152,32 @@ fun HomeScreen(mapViewModel: MapViewModel) {
     // 지도 준비되면 현재 위치로 이동
     LaunchedEffect(kakaoMapInstance) {
         if (kakaoMapInstance != null) moveToCurrentLocation()
+    }
+
+    // 매장 마커들을 보관할 리스트
+    val storeLabels = remember { mutableStateListOf<com.kakao.vectormap.label.Label>() }
+
+    // 매장 목록(filteredStores)이 갱신될 때마다 마커를 지우고 새로 그림
+    LaunchedEffect(filteredStores, kakaoMapInstance) {
+        val map = kakaoMapInstance ?: return@LaunchedEffect
+        val layer = map.labelManager?.layer ?: return@LaunchedEffect
+
+        // 1. 기존 매장 마커 전부 제거
+        storeLabels.forEach { label -> layer.remove(label) }
+        storeLabels.clear()
+
+        // 2. 새 매장 마커 추가
+        val markerBitmap = getBitmapFromDrawable(context, R.drawable.ic_store_marker)
+        filteredStores.forEach { store ->
+            val storeLatLng = LatLng.from(store.latitude, store.longitude)
+            val label = layer.addLabel(
+                LabelOptions.from(storeLatLng)
+                    .setStyles(LabelStyle.from(markerBitmap))
+            )
+            if (label != null) {
+                storeLabels.add(label)
+            }
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -281,7 +315,8 @@ fun HomeScreen(mapViewModel: MapViewModel) {
         ) {
             NearbyStoreBottomSheet(
                 stores = filteredStores,
-                onClose = { mapViewModel.hideBottomSheet() }
+                onClose = { mapViewModel.hideBottomSheet() },
+                onStoreClick = onStoreClick
             )
         }
     }
@@ -653,7 +688,8 @@ fun NearbyRecommendButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
 @Composable
 fun NearbyStoreBottomSheet(
     stores: List<StoreItem>,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onStoreClick: (Int) -> Unit = {}
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         // 핸들
@@ -683,7 +719,10 @@ fun NearbyStoreBottomSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             items(stores) { store ->
-                StoreListItem(store = store)
+                StoreListItem(
+                    store = store,
+                    onClick = { onStoreClick(store.id) }
+                )
             }
             item { Spacer(modifier = Modifier.height(16.dp)) }
         }
@@ -694,7 +733,10 @@ fun NearbyStoreBottomSheet(
 // 매장 리스트 아이템
 // ────────────────────────────────────────────────────────────
 @Composable
-fun StoreListItem(store: StoreItem) {
+fun StoreListItem(
+    store: StoreItem,
+    onClick: () -> Unit = {}
+) {
     val categoryLabel = when (store.category) {
         MapCategory.CLAW_MACHINE -> "인형뽑기"
         MapCategory.GACHA -> "가챠"
@@ -709,7 +751,9 @@ fun StoreListItem(store: StoreItem) {
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -718,14 +762,23 @@ fun StoreListItem(store: StoreItem) {
             modifier = Modifier.padding(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // 썸네일 (더미)
+            // 썸네일
             Box(
                 modifier = Modifier
                     .size(72.dp)
                     .clip(RoundedCornerShape(8.dp))
-                    .background(Color(0xFFEEEEEE)),
+                    .background(Color(0xFFF3F4F6)),
                 contentAlignment = Alignment.TopStart
             ) {
+                if (!store.mainImageUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = store.mainImageUrl,
+                        contentDescription = "매장 썸네일",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+
                 // 카테고리 뱃지
                 Box(
                     modifier = Modifier

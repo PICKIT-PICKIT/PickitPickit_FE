@@ -125,6 +125,9 @@ internal fun MyPageScreenContent(
     // 로컬 푸시 알림 설정 값 (기본값 true)
     val localPushEnabled by userPreferences.isPushNotificationsEnabled.collectAsState(initial = true)
 
+    // 로컬 검색 반경 설정 값 (기본값 1000m = 1km)
+    val searchRadius by userPreferences.searchRadius.collectAsState(initial = 1000)
+    var showRadiusDialog by remember { mutableStateOf(false) }
     // 최종 사용자 알림 활성화 여부
     val isNotificationsOn = notificationsEnabled && localPushEnabled
 
@@ -314,11 +317,19 @@ internal fun MyPageScreenContent(
 
                 SectionLabel(text = "위치 설정")
                 SettingsCard {
+                    val radiusSubtitle = when (searchRadius) {
+                        500 -> "500미터 (500m)"
+                        1000 -> "1 킬로미터 (1km)"
+                        3000 -> "3 킬로미터 (3km)"
+                        5000 -> "5 킬로미터 (5km)"
+                        else -> "${searchRadius / 1000.0} 킬로미터"
+                    }
                     SettingsItem(
                         iconRes = R.drawable.ic_distance,
                         iconTint = Color(0xFF5393FA),
                         title = "거리 단위",
-                        subtitle = "킬로미터 (km)"
+                        subtitle = radiusSubtitle,
+                        onClick = { showRadiusDialog = true }
                     )
                     HorizontalDivider(color = Color(0xFFF0F0F0), thickness = 0.7.dp)
                     SettingsItem(
@@ -471,6 +482,70 @@ internal fun MyPageScreenContent(
             ) {
                 CircularProgressIndicator(color = Color(0xFF5393FA))
             }
+        }
+
+        if (showRadiusDialog) {
+            val options = listOf(
+                500 to "500미터 (500m)",
+                1000 to "1 킬로미터 (1km)",
+                3000 to "3 킬로미터 (3km)",
+                5000 to "5 킬로미터 (5km)"
+            )
+
+            AlertDialog(
+                onDismissRequest = { showRadiusDialog = false },
+                title = {
+                    Text(
+                        text = "검색 반경 설정",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = Color(0xFF1A1A2E)
+                    )
+                },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        options.forEach { (value, label) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        coroutineScope.launch {
+                                            userPreferences.setSearchRadius(value)
+                                            showRadiusDialog = false
+                                        }
+                                    }
+                                    .padding(vertical = 12.dp, horizontal = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected = (searchRadius == value),
+                                    onClick = {
+                                        coroutineScope.launch {
+                                            userPreferences.setSearchRadius(value)
+                                            showRadiusDialog = false
+                                        }
+                                    },
+                                    colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF5393FA))
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = label,
+                                    fontSize = 15.sp,
+                                    color = Color(0xFF1A1A2E),
+                                    fontWeight = if (searchRadius == value) FontWeight.Bold else FontWeight.Normal
+                                )
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showRadiusDialog = false }) {
+                        Text("닫기", color = Color(0xFF5393FA), fontWeight = FontWeight.Bold)
+                    }
+                },
+                shape = RoundedCornerShape(16.dp),
+                containerColor = Color.White
+            )
         }
     }
 }
