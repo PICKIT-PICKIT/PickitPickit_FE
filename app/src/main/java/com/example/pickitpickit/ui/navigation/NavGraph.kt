@@ -142,7 +142,6 @@ fun MainNavGraph(
                 // ── 성공 ───────────────────────────────────────────────
                 is StoreDetailUiState.Success -> {
                     val isReviewSubmitting by storeDetailViewModel.isReviewSubmitting.collectAsState()
-                    val submitResult by storeDetailViewModel.submitResult.collectAsState(initial = null)
                     val currentUserId by storeDetailViewModel.currentUserId.collectAsState()
                     val writeGuide by storeDetailViewModel.writeGuide.collectAsState()
 
@@ -154,7 +153,7 @@ fun MainNavGraph(
                             storeDetailViewModel.submitReview(rating, difficulty, content)
                         },
                         isReviewSubmitting = isReviewSubmitting,
-                        submitResult = submitResult,
+                        submitResultFlow = storeDetailViewModel.submitResult,
                         currentUserId = currentUserId,
                         writeGuide = writeGuide,
                         onEditReview = { reviewId, rating, difficulty, content ->
