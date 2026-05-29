@@ -80,7 +80,7 @@ class OnboardingViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorMessage = null) }
             
-            // 6종 고품질 로컬 Unsplash 기본 이미지 리스트 정의
+            // 6종 고품질 로컬 Unsplash 기본 이미지 리스트 정의 (온보딩 및 기존 설정과 호환)
             val defaultUnsplashImages = listOf(
                 DefaultProfileImageResponse("1", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80"),
                 DefaultProfileImageResponse("2", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=300&q=80"),

@@ -10,6 +10,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -103,6 +104,12 @@ fun MyPageScreen(
         onEditClick = {
             myPageViewModel.resetEditState()
             showProfileEdit = true
+        },
+        onDeleteAccountClick = {
+            myPageViewModel.deleteAccount {
+                // 회원 탈퇴 성공 시 로그아웃과 마찬가지로 Onboarding/Login 화면으로 전환
+                onLogoutClick()
+            }
         }
     )
 }
@@ -111,7 +118,8 @@ fun MyPageScreen(
 internal fun MyPageScreenContent(
     uiState: MyPageState,
     onLogoutClick: () -> Unit,
-    onEditClick: () -> Unit
+    onEditClick: () -> Unit,
+    onDeleteAccountClick: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -128,7 +136,7 @@ internal fun MyPageScreenContent(
     // 로컬 검색 반경 설정 값 (기본값 1000m = 1km)
     val searchRadius by userPreferences.searchRadius.collectAsState(initial = 1000)
     var showRadiusDialog by remember { mutableStateOf(false) }
-
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     // 최종 사용자 알림 활성화 여부
     val isNotificationsOn = notificationsEnabled && localPushEnabled
 
@@ -267,17 +275,14 @@ internal fun MyPageScreenContent(
                                 }
                                 Spacer(modifier = Modifier.height(6.dp))
                                 if (uiState.selectedTags.isNotEmpty()) {
-                                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        uiState.selectedTags.take(3).forEach { tag ->
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState())
+                                    ) {
+                                        uiState.selectedTags.forEach { tag ->
                                             TagChip(tag = tag)
-                                        }
-                                        if (uiState.selectedTags.size > 3) {
-                                            Text(
-                                                text = "+${uiState.selectedTags.size - 3}",
-                                                fontSize = 11.sp,
-                                                color = Color.Gray,
-                                                modifier = Modifier.align(Alignment.CenterVertically)
-                                            )
                                         }
                                     }
                                 }
@@ -310,7 +315,8 @@ internal fun MyPageScreenContent(
                         icon = Icons.AutoMirrored.Filled.ExitToApp,
                         iconTint = Color(0xFF5393FA),
                         title = "로그아웃",
-                        subtitle = "계정에서 로그아웃"
+                        subtitle = "계정에서 로그아웃",
+                        onClick = onLogoutClick
                     )
                 }
 
@@ -449,7 +455,7 @@ internal fun MyPageScreenContent(
                 Spacer(modifier = Modifier.height(24.dp))
 
                 Button(
-                    onClick = onLogoutClick,
+                    onClick = { showDeleteConfirmDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
@@ -457,14 +463,14 @@ internal fun MyPageScreenContent(
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                        imageVector = Icons.Default.Person,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "로그아웃",
+                        text = "회원 탈퇴",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
@@ -545,6 +551,50 @@ internal fun MyPageScreenContent(
                     }
                 },
                 shape = RoundedCornerShape(16.dp),
+                containerColor = Color.White
+            )
+        }
+
+        if (showDeleteConfirmDialog) {
+            AlertDialog(
+                onDismissRequest = { showDeleteConfirmDialog = false },
+                title = {
+                    Text(
+                        text = "회원 탈퇴",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = Color(0xFF1A1A2E)
+                    )
+                },
+                text = {
+                    Text(
+                        text = "정말로 회원 탈퇴를 하시겠습니까?\n\n탈퇴 시:\n- 작성하신 리뷰와 자랑하기 게시글은 삭제되지 않고 유지되지만 작성자 정보는 '탈퇴한 사용자'로 익명 처리됩니다.\n- 관심 태그, 관심 매장, 검색 기록 등 모든 설정은 완전히 파기됩니다.",
+                        fontSize = 14.sp,
+                        color = Color(0xFF4B5563),
+                        lineHeight = 20.sp
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showDeleteConfirmDialog = false
+                            onDeleteAccountClick()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("탈퇴하기", color = Color.White)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = { showDeleteConfirmDialog = false },
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFD1D5DB))
+                    ) {
+                        Text("취소", color = Color(0xFF4B5563))
+                    }
+                },
                 containerColor = Color.White
             )
         }
@@ -691,7 +741,8 @@ fun MyPageScreenPreview() {
         MyPageScreenContent(
             uiState = dummyState,
             onLogoutClick = {},
-            onEditClick = {}
+            onEditClick = {},
+            onDeleteAccountClick = {}
         )
     }
 }
@@ -703,7 +754,9 @@ fun MyPageScreenLoadingPreview() {
         MyPageScreenContent(
             uiState = MyPageState(isLoading = true),
             onLogoutClick = {},
-            onEditClick = {}
+            onEditClick = {},
+            onDeleteAccountClick = {}
         )
     }
 }
+

@@ -58,7 +58,6 @@ class UserPreferences(private val context: Context) {
     suspend fun setSearchRadius(radius: Int) {
         context.dataStore.edit { it[SEARCH_RADIUS_KEY] = radius }
     }
-
     // ──────────────────────────────────────────────────────────────
     // JWT 토큰 저장 / 읽기 / 삭제
     // ──────────────────────────────────────────────────────────────
