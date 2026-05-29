@@ -553,7 +553,12 @@ private fun StoreInfoCard(
             val context = androidx.compose.ui.platform.LocalContext.current
             Button(
                 onClick = {
-                    val appScheme = "kakaomap://route?ep=$latitude,$longitude&by=CAR"
+                    val encodedStoreName = try {
+                        java.net.URLEncoder.encode(storeName, "UTF-8")
+                    } catch (e: java.io.UnsupportedEncodingException) {
+                        storeName
+                    }
+                    val appScheme = "kakaomap://route?ep=$latitude,$longitude&en=$encodedStoreName&by=CAR"
                     val webUrl = "https://map.kakao.com/link/to/$storeName,$latitude,$longitude"
                     try {
                         val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(appScheme))
