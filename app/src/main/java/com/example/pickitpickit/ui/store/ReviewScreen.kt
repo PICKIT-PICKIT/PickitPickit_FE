@@ -47,19 +47,20 @@ fun ReviewScreen(
 
     val reviewState by viewModel.reviewState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val submitResult by viewModel.submitResult.collectAsState(initial = null)
 
     var showWriteDialog by remember { mutableStateOf(false) }
     val context = LocalContext.current
 
     // 리뷰 작성 결과에 따른 다이얼로그 처리 및 토스트 메시지
-    LaunchedEffect(submitResult) {
-        submitResult?.let { result ->
-            if (result.isEmpty()) {
-                Toast.makeText(context, "리뷰가 성공적으로 등록되었습니다!", Toast.LENGTH_SHORT).show()
-                showWriteDialog = false
-            } else {
-                Toast.makeText(context, result, Toast.LENGTH_SHORT).show()
+    LaunchedEffect(Unit) {
+        viewModel.submitResult.collect { result ->
+            result?.let { msg ->
+                if (msg == "CREATE_SUCCESS" || msg.isEmpty()) {
+                    Toast.makeText(context, "리뷰가 성공적으로 등록되었습니다!", Toast.LENGTH_SHORT).show()
+                    showWriteDialog = false
+                } else {
+                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                }
             }
         }
     }

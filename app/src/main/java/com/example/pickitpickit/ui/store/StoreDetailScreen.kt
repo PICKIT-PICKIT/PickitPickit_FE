@@ -46,6 +46,7 @@ import com.example.pickitpickit.core.model.StoreDetailResponse
 import com.example.pickitpickit.core.model.StoreReviewListResponse
 import com.example.pickitpickit.core.model.TagDto
 import com.example.pickitpickit.ui.theme.PickitPickitTheme
+import kotlinx.coroutines.flow.SharedFlow
 
 // ──────────────────────────────────────────────────────────────
 // 매장 상세 화면
@@ -58,7 +59,7 @@ fun StoreDetailScreen(
     onBackClick: () -> Unit,
     onSubmitReview: (Double, Int, String?) -> Unit,
     isReviewSubmitting: Boolean,
-    submitResult: String?,
+    submitResultFlow: SharedFlow<String?>,
     currentUserId: Long?,
     writeGuide: com.example.pickitpickit.core.model.ReviewWriteGuideResponse?,
     onEditReview: (Long, Double, Int, String?) -> Unit,
@@ -70,15 +71,33 @@ fun StoreDetailScreen(
     var reviewToDelete by remember { mutableStateOf<Long?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
 
-    LaunchedEffect(submitResult) {
-        submitResult?.let { result ->
-            if (result.isEmpty()) {
-                android.widget.Toast.makeText(context, "성공적으로 반영되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
-                showWriteDialog = false
-                editingReview = null
-                reviewToDelete = null
-            } else {
-                android.widget.Toast.makeText(context, result, android.widget.Toast.LENGTH_SHORT).show()
+    LaunchedEffect(Unit) {
+        submitResultFlow.collect { result ->
+            result?.let { msg ->
+                when (msg) {
+                    "CREATE_SUCCESS", "" -> {
+                        android.widget.Toast.makeText(context, "리뷰가 성공적으로 등록되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                        showWriteDialog = false
+                        editingReview = null
+                        reviewToDelete = null
+                    }
+                    "DELETE_SUCCESS" -> {
+                        android.widget.Toast.makeText(context, "리뷰가 성공적으로 삭제되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                        showWriteDialog = false
+                        editingReview = null
+                        reviewToDelete = null
+                    }
+                    "EDIT_SUCCESS" -> {
+                        // 수정은 클릭 즉시 닫히고 자체 토스트를 보여주므로 여기서는 상태 초기화만 처리합니다.
+                        showWriteDialog = false
+                        editingReview = null
+                        reviewToDelete = null
+                    }
+                    else -> {
+                        // 에러 메시지
+                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
             }
         }
     }
@@ -124,6 +143,9 @@ fun StoreDetailScreen(
         // ── 3. 매장 정보 카드 ────────────────────────────────────
         item {
             StoreInfoCard(
+                storeName = store.name,
+                latitude = store.latitude,
+                longitude = store.longitude,
                 hours = store.businessHours ?: "영업시간 정보 없음",
                 contact = store.contact ?: "전화번호 정보 없음",
                 avgDifficulty = if (storeDetail.products.isNotEmpty()) {
@@ -200,6 +222,8 @@ fun StoreDetailScreen(
             onSubmit = { rating, difficulty, content ->
                 if (editingReview != null) {
                     onEditReview(editingReview!!.reviewId, rating, difficulty, content)
+                    editingReview = null // 팝업 즉시 닫기
+                    android.widget.Toast.makeText(context, "리뷰가 성공적으로 수정되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
                 } else {
                     onSubmitReview(rating, difficulty, content)
                 }
@@ -455,6 +479,9 @@ private fun StatCard(
 
 @Composable
 private fun StoreInfoCard(
+    storeName: String,
+    latitude: Double,
+    longitude: Double,
     hours: String,
     contact: String,
     avgDifficulty: Double?,
@@ -523,8 +550,24 @@ private fun StoreInfoCard(
             Spacer(modifier = Modifier.height(16.dp))
 
             // 길찾기 버튼
+            val context = androidx.compose.ui.platform.LocalContext.current
             Button(
-                onClick = { /* TODO: 카카오맵 아웃링크 */ },
+                onClick = {
+                    val encodedStoreName = try {
+                        java.net.URLEncoder.encode(storeName, "UTF-8")
+                    } catch (e: java.io.UnsupportedEncodingException) {
+                        storeName
+                    }
+                    val appScheme = "kakaomap://route?ep=$latitude,$longitude&en=$encodedStoreName&by=CAR"
+                    val webUrl = "https://map.kakao.com/link/to/$storeName,$latitude,$longitude"
+                    try {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(appScheme))
+                        context.startActivity(intent)
+                    } catch (e: android.content.ActivityNotFoundException) {
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(webUrl))
+                        context.startActivity(intent)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(46.dp),
@@ -535,7 +578,7 @@ private fun StoreInfoCard(
             ) {
                 Text("✈ ", fontSize = 14.sp, color = Color.White)
                 Text(
-                    "길찾기 (Google Maps)",
+                    "길찾기 (Kakao Maps)",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
                     color = Color.White
@@ -1593,7 +1636,7 @@ fun StoreDetailScreenPreview() {
             onBackClick = {},
             onSubmitReview = { _, _, _ -> },
             isReviewSubmitting = false,
-            submitResult = null,
+            submitResultFlow = kotlinx.coroutines.flow.MutableSharedFlow(),
             currentUserId = null,
             writeGuide = null,
             onEditReview = { _, _, _, _ -> },

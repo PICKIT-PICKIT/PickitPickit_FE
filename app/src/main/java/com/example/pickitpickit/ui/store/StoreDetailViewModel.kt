@@ -123,7 +123,7 @@ class StoreDetailViewModel(
             )
             val errorMsg = reviewRepository.postReview(request)
             if (errorMsg == null) {
-                _submitResult.emit("")
+                _submitResult.emit("CREATE_SUCCESS")
                 // 작성 성공 시 상세 정보 및 리뷰 목록 다시 로드
                 val detail = repository.getStoreDetail(
                     storeId = storeId.toLong(),
@@ -153,7 +153,7 @@ class StoreDetailViewModel(
             )
             val errorMsg = reviewRepository.updateReview(reviewId, request)
             if (errorMsg == null) {
-                _submitResult.emit("")
+                _submitResult.emit("EDIT_SUCCESS")
                 // 수정 성공 시 상세 정보 및 리뷰 목록 다시 로드
                 val detail = repository.getStoreDetail(
                     storeId = storeId.toLong(),
@@ -177,7 +177,7 @@ class StoreDetailViewModel(
             val userId = _currentUserId.value ?: GlobalApplication.userPreferences.getUserId().first() ?: 0L
             val errorMsg = reviewRepository.deleteReview(reviewId, userId)
             if (errorMsg == null) {
-                _submitResult.emit("")
+                _submitResult.emit("DELETE_SUCCESS")
                 // 삭제 성공 시 상세 정보 및 리뷰 목록 다시 로드
                 val detail = repository.getStoreDetail(
                     storeId = storeId.toLong(),

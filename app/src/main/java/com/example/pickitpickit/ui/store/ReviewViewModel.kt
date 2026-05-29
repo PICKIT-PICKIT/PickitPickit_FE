@@ -57,7 +57,7 @@ class ReviewViewModel(private val storeId: Long) : ViewModel() {
             )
             val errorMsg = repository.postReview(request)
             if (errorMsg == null) {
-                _submitResult.emit("")
+                _submitResult.emit("CREATE_SUCCESS")
                 // 작성 성공 시 목록 다시 로드
                 loadReviews()
             } else {
