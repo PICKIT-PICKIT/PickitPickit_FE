@@ -16,10 +16,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -47,6 +49,28 @@ import com.example.pickitpickit.core.model.StoreReviewListResponse
 import com.example.pickitpickit.core.model.TagDto
 import com.example.pickitpickit.ui.theme.PickitPickitTheme
 import kotlinx.coroutines.flow.SharedFlow
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.painterResource
+import androidx.activity.compose.rememberLauncherForActivityResult
+import android.util.Log
+
+data class BragItem(
+    val id: Long,
+    val title: String,
+    val description: String?,
+    val storeName: String?,
+    val imageUrl: String,
+    val tags: List<String>,
+    val authorNickname: String,
+    val authorProfileImageUrl: String?,
+    val createdAt: String
+)
 
 // ──────────────────────────────────────────────────────────────
 // 매장 상세 화면
@@ -56,6 +80,7 @@ import kotlinx.coroutines.flow.SharedFlow
 fun StoreDetailScreen(
     storeDetail: StoreDetailResponse,
     reviewData: StoreReviewListResponse?,
+    bragData: List<com.example.pickitpickit.core.model.BragDto>?,
     onBackClick: () -> Unit,
     onSubmitReview: (Double, Int, String?) -> Unit,
     isReviewSubmitting: Boolean,
@@ -63,13 +88,24 @@ fun StoreDetailScreen(
     currentUserId: Long?,
     writeGuide: com.example.pickitpickit.core.model.ReviewWriteGuideResponse?,
     onEditReview: (Long, Double, Int, String?) -> Unit,
-    onDeleteReview: (Long) -> Unit
+    onDeleteReview: (Long) -> Unit,
+    isBragSubmitting: Boolean,
+    bragSubmitResultFlow: SharedFlow<String?>,
+    onSubmitBrag: (Int, String, String) -> Unit,
+    onDeleteBrag: (Long) -> Unit,
+    onEditBrag: (Long, Int, String, String) -> Unit
 ) {
     val store = storeDetail.store
     var showWriteDialog by remember { mutableStateOf(false) }
     var editingReview by remember { mutableStateOf<ReviewDto?>(null) }
     var reviewToDelete by remember { mutableStateOf<Long?>(null) }
     val context = androidx.compose.ui.platform.LocalContext.current
+
+    // 자랑하기 팝업 및 삭제 상태 관리
+    var showBragWriteDialog by remember { mutableStateOf(false) }
+    var bragToDelete by remember { mutableStateOf<Long?>(null) }
+    var zoomedImageUri by remember { mutableStateOf<String?>(null) }
+    var editingBrag by remember { mutableStateOf<com.example.pickitpickit.core.model.BragDto?>(null) }
 
     LaunchedEffect(Unit) {
         submitResultFlow.collect { result ->
@@ -95,6 +131,32 @@ fun StoreDetailScreen(
                     }
                     else -> {
                         // 에러 메시지
+                        android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        bragSubmitResultFlow.collect { result ->
+            result?.let { msg ->
+                when (msg) {
+                    "CREATE_SUCCESS", "" -> {
+                        android.widget.Toast.makeText(context, "자랑글이 성공적으로 등록되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                        showBragWriteDialog = false
+                        bragToDelete = null
+                    }
+                    "DELETE_SUCCESS" -> {
+                        android.widget.Toast.makeText(context, "자랑글이 성공적으로 삭제되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                        bragToDelete = null
+                    }
+                    "EDIT_SUCCESS" -> {
+                        showBragWriteDialog = false
+                        editingBrag = null
+                        bragToDelete = null
+                    }
+                    else -> {
                         android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
@@ -208,6 +270,37 @@ fun StoreDetailScreen(
                 )
             }
         }
+
+        // ── 10. 자랑하기 섹션 헤더 ──────────────────────────────────
+        item {
+            BragSectionHeader(
+                bragCount = bragData?.size ?: 0,
+                onWriteClick = { showBragWriteDialog = true }
+            )
+        }
+
+        // ── 11. 자랑하기 리스트 or 빈 상태 ───────────────────────────
+        if (bragData.isNullOrEmpty()) {
+            item {
+                BragEmptyCard(
+                    onWriteClick = { showBragWriteDialog = true }
+                )
+            }
+        } else {
+            items(bragData) { brag ->
+                BragListItemCard(
+                    brag = brag,
+                    currentUserId = currentUserId,
+                    onDeleteClick = {
+                        bragToDelete = brag.bragId
+                    },
+                    onEditClick = {
+                        editingBrag = brag
+                    },
+                    onImageClick = { zoomedImageUri = it }
+                )
+            }
+        }
     }
 
     if (showWriteDialog || editingReview != null) {
@@ -229,6 +322,27 @@ fun StoreDetailScreen(
                 }
             },
             isSubmitting = isReviewSubmitting
+        )
+    }
+
+    if (showBragWriteDialog || editingBrag != null) {
+        StoreBragWriteDialog(
+            storeName = store.name,
+            bragToEdit = editingBrag,
+            onDismiss = {
+                showBragWriteDialog = false
+                editingBrag = null
+            },
+            onSubmit = { imageUri, content ->
+                if (editingBrag != null) {
+                    onEditBrag(editingBrag!!.bragId, 0, imageUri, content)
+                    editingBrag = null
+                    android.widget.Toast.makeText(context, "자랑글이 성공적으로 수정되었습니다!", android.widget.Toast.LENGTH_SHORT).show()
+                } else {
+                    onSubmitBrag(0, imageUri, content)
+                }
+            },
+            isSubmitting = isBragSubmitting
         )
     }
 
@@ -274,6 +388,93 @@ fun StoreDetailScreen(
             containerColor = Color.White,
             properties = DialogProperties(usePlatformDefaultWidth = true)
         )
+    }
+
+    if (bragToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { bragToDelete = null },
+            title = {
+                Text(
+                    text = "자랑글 삭제",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF1A1A2E)
+                )
+            },
+            text = {
+                Text(
+                    text = "작성하신 자랑글을 정말로 삭제하시겠습니까?\n삭제된 자랑글은 복구할 수 없습니다.",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        bragToDelete?.let { onDeleteBrag(it) }
+                        bragToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFEF4444)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("삭제", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { bragToDelete = null },
+                    shape = RoundedCornerShape(8.dp),
+                    border = BorderStroke(1.dp, Color(0xFFD1D5DB))
+                ) {
+                    Text("취소", color = Color(0xFF4B5563))
+                }
+            },
+            containerColor = Color.White,
+            properties = DialogProperties(usePlatformDefaultWidth = true)
+        )
+    }
+
+    if (zoomedImageUri != null) {
+        Dialog(
+            onDismissRequest = { zoomedImageUri = null },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                dismissOnBackPress = true,
+                dismissOnClickOutside = true
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.9f))
+                    .clickable { zoomedImageUri = null },
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = zoomedImageUri,
+                    contentDescription = "자랑 원본 이미지",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.85f)
+                        .padding(16.dp),
+                    contentScale = ContentScale.Fit
+                )
+
+                IconButton(
+                    onClick = { zoomedImageUri = null },
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .padding(top = 40.dp, end = 20.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), shape = CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "닫기",
+                        tint = Color.White
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1113,7 +1314,7 @@ private fun ReviewListItemCard(
                                 text = "수정",
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = Color(0xFF6B7280),
+                                color = Color(0xFF3B6EF8),
                                 modifier = Modifier.clickable { onEditClick() }
                             )
                             Text(
@@ -1564,6 +1765,978 @@ private fun StoreReviewWriteDialog(
 }
 
 // ──────────────────────────────────────────────────────────────
+// 자랑하기 관련 컴포넌트들
+// ──────────────────────────────────────────────────────────────
+
+@Composable
+private fun BragSectionHeader(
+    bragCount: Int,
+    onWriteClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(top = 16.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "🎉 자랑하기",
+                fontWeight = FontWeight.Bold,
+                fontSize = 18.sp,
+                color = Color(0xFF1A1A2E)
+            )
+        }
+
+        // 자랑하기 작성 버튼 (그라데이션 버튼)
+        val bragGradient = Brush.horizontalGradient(
+            colors = listOf(Color(0xFFF6339A), Color(0xFFAD46FF))
+        )
+        
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .background(bragGradient)
+                .clickable { onWriteClick() }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = com.example.pickitpickit.R.drawable.ic_profile),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(
+                    text = "자랑하기 작성",
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BragEmptyCard(
+    onWriteClick: () -> Unit
+) {
+    val bragGradient = Brush.horizontalGradient(
+        colors = listOf(Color(0xFFF6339A), Color(0xFFAD46FF))
+    )
+    
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(24.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        border = BorderStroke(
+            1.dp,
+            Brush.horizontalGradient(
+                listOf(Color(0xFFF6339A).copy(alpha = 0.2f), Color(0xFFAD46FF).copy(alpha = 0.2f))
+            )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 40.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            // 스파클 아이콘 컨테이너
+            Box(
+                modifier = Modifier
+                    .size(90.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFF6339A).copy(alpha = 0.08f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(id = com.example.pickitpickit.R.drawable.ic_tag),
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .graphicsLayer(alpha = 0.99f)
+                        .drawWithCache {
+                            onDrawWithContent {
+                                drawContent()
+                                drawRect(
+                                    brush = bragGradient,
+                                    blendMode = BlendMode.SrcAtop
+                                )
+                            }
+                        }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Text(
+                text = "아직 자랑하기가 없어요",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A2E)
+            )
+
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Text(
+                text = "이 매장에서 뽑은 인형이나 가챠를 자랑해보세요!",
+                fontSize = 13.sp,
+                color = Color(0xFF6B7280)
+            )
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 첫 번째 자랑하기 작성 버튼
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(bragGradient)
+                    .clickable { onWriteClick() }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = com.example.pickitpickit.R.drawable.ic_profile),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "첫 번째 자랑하기 작성",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BragListItemCard(
+    brag: com.example.pickitpickit.core.model.BragDto,
+    currentUserId: Long?,
+    onDeleteClick: () -> Unit,
+    onEditClick: () -> Unit,
+    onImageClick: (String) -> Unit
+) {
+    val (title, description, storeName, tags) = parseBragContent(brag.content)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            // 작성자 프로필
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                if (!brag.authorProfileImageUrl.isNullOrEmpty()) {
+                    AsyncImage(
+                        model = brag.authorProfileImageUrl,
+                        contentDescription = "프로필 이미지",
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFF3F4F6)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("👤", fontSize = 16.sp)
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(10.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = brag.authorNickname,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A2E)
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        val formattedDate = try {
+                            val isoDateTime = brag.createdAt
+                            if (isoDateTime.contains("T")) {
+                                val datePart = isoDateTime.split("T")[0]
+                                val timePart = isoDateTime.split("T")[1].substring(0, 5)
+                                "$datePart $timePart"
+                            } else {
+                                isoDateTime
+                            }
+                        } catch (e: Exception) {
+                            brag.createdAt
+                        }
+                        Text(
+                            text = formattedDate,
+                            fontSize = 11.sp,
+                            color = Color(0xFF9CA3AF)
+                        )
+                        if (brag.userId == currentUserId) {
+                            Text(
+                                text = " • ",
+                                fontSize = 11.sp,
+                                color = Color(0xFF9CA3AF)
+                            )
+                            Text(
+                                text = "수정",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF3B6EF8),
+                                modifier = Modifier.clickable { onEditClick() }
+                            )
+                            Text(
+                                text = " • ",
+                                fontSize = 11.sp,
+                                color = Color(0xFF9CA3AF)
+                            )
+                            Text(
+                                text = "삭제",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFEF4444),
+                                modifier = Modifier.clickable { onDeleteClick() }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 자랑 이미지
+            AsyncImage(
+                model = brag.imageUrl,
+                contentDescription = "자랑 이미지",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(200.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .clickable { onImageClick(brag.imageUrl) },
+                contentScale = ContentScale.Crop
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // 제목
+            Text(
+                text = title,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF1A1A2E)
+            )
+
+            if (!description.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = description,
+                    fontSize = 13.sp,
+                    color = Color(0xFF4B5563),
+                    lineHeight = 18.sp
+                )
+            }
+
+            if (!storeName.isNullOrEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📍", fontSize = 12.sp)
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = storeName,
+                        fontSize = 12.sp,
+                        color = Color(0xFF3B6EF8),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            if (tags.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    tags.forEach { tag ->
+                        Text(
+                            text = "#$tag",
+                            fontSize = 11.sp,
+                            color = Color(0xFFAD46FF),
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFF5F3FF))
+                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StoreBragWriteDialog(
+    storeName: String,
+    bragToEdit: com.example.pickitpickit.core.model.BragDto? = null,
+    onDismiss: () -> Unit,
+    onSubmit: (String, String) -> Unit, // (imageUrl, content)
+    isSubmitting: Boolean
+) {
+    val parsedContent = remember(bragToEdit) {
+        bragToEdit?.let { parseBragContent(it.content) }
+    }
+
+    var title by remember { mutableStateOf(parsedContent?.first ?: "") }
+    var description by remember { mutableStateOf(parsedContent?.second ?: "") }
+    var customStoreName by remember { mutableStateOf(parsedContent?.third ?: storeName) }
+    var selectedImageUri by remember { mutableStateOf<String?>(bragToEdit?.imageUrl) }
+    var tagInput by remember { mutableStateOf("") }
+    var tagsList by remember { mutableStateOf(parsedContent?.fourth ?: emptyList<String>()) }
+    
+    val titleLimit = 50
+    val descLimit = 300
+    val maxTags = 5
+
+    // 카메라/갤러리 선택 팝업 상태
+    var showPhotoSourceDialog by remember { mutableStateOf(false) }
+
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    // 카메라 사진 저장을 위한 임시 파일 및 URI 관리
+    var tempPhotoUri by remember { mutableStateOf<android.net.Uri?>(null) }
+
+    // 갤러리 이미지 선택 런처
+    val pickMediaLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                    val timeStamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                    val storageDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES)
+                    val file = java.io.File.createTempFile("BRAG_${timeStamp}_", ".jpg", storageDir)
+                    file.outputStream().use { outputStream ->
+                        inputStream.copyTo(outputStream)
+                    }
+                    val fileProviderUri = androidx.core.content.FileProvider.getUriForFile(
+                        context,
+                        "${context.packageName}.fileprovider",
+                        file
+                    )
+                    selectedImageUri = fileProviderUri.toString()
+                }
+            } catch (e: Exception) {
+                Log.e("GALLERY_FLOW", "갤러리 이미지 복사 에러", e)
+                android.widget.Toast.makeText(context, "이미지를 가져오는 데 실패했습니다.", android.widget.Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // 카메라 촬영 런처
+    val takePictureLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && tempPhotoUri != null) {
+            selectedImageUri = tempPhotoUri.toString()
+        }
+    }
+
+    // 카메라 권한 런처
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(
+        contract = androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            tempPhotoUri?.let { takePictureLauncher.launch(it) }
+        } else {
+            android.widget.Toast.makeText(context, "사진을 찍기 위해 카메라 권한이 필요합니다.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // 헬퍼: 카메라 띄우기 전 권한 확인 및 임시 파일 생성
+    fun launchCameraFlow() {
+        try {
+            val timeStamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+            val storageDir = context.getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES)
+            val file = java.io.File.createTempFile("JPEG_${timeStamp}_", ".jpg", storageDir)
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                file
+            )
+            tempPhotoUri = uri
+
+            // 권한 체크
+            val permissionCheck = androidx.core.content.ContextCompat.checkSelfPermission(
+                context,
+                android.Manifest.permission.CAMERA
+            )
+            if (permissionCheck == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                takePictureLauncher.launch(uri)
+            } else {
+                cameraPermissionLauncher.launch(android.Manifest.permission.CAMERA)
+            }
+        } catch (e: Exception) {
+            Log.e("CAMERA_FLOW", "카메라 촬영 준비 에러", e)
+            android.widget.Toast.makeText(context, "카메라 실행 준비에 실패했습니다.", android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val scrollState = rememberScrollState()
+
+    if (showPhotoSourceDialog) {
+        AlertDialog(
+            onDismissRequest = { showPhotoSourceDialog = false },
+            title = {
+                Text(
+                    text = "사진 추가하기",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                    color = Color(0xFF1A1A2E)
+                )
+            },
+            text = {
+                Text(
+                    text = "어떤 방법으로 사진을 추가하시겠습니까?",
+                    fontSize = 14.sp,
+                    color = Color(0xFF4B5563)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showPhotoSourceDialog = false
+                        launchCameraFlow()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF3B6EF8)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("직접 촬영", color = Color.White)
+                }
+            },
+            dismissButton = {
+                Button(
+                    onClick = {
+                        showPhotoSourceDialog = false
+                        pickMediaLauncher.launch(
+                            androidx.activity.result.PickVisualMediaRequest(
+                                androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4B5563)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("갤러리에서 선택", color = Color.White)
+                }
+            },
+            containerColor = Color.White,
+            properties = DialogProperties(usePlatformDefaultWidth = true)
+        )
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .fillMaxHeight(0.90f)
+                .padding(vertical = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(containerColor = Color.White),
+            elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(24.dp)
+            ) {
+                // 상단 X 닫기 버튼 영역
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.align(Alignment.TopEnd)
+                    ) {
+                        Text("✕", fontSize = 16.sp, color = Color(0xFF9CA3AF))
+                    }
+                }
+
+                // 스크롤 가능한 본문 영역
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                ) {
+                    Text(
+                        text = if (bragToEdit != null) "✏️ 자랑하기 수정" else "🎉 자랑하기",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFF1A1A2E)
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = if (bragToEdit != null) "작성하신 자랑글 내용을 수정해 보세요!" else "내가 뽑은 인형이나 가챠를 자랑해보세요!",
+                        fontSize = 13.sp,
+                        color = Color(0xFF6B7280)
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    // 1. 사진 선택 영역 (필수)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("사진", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("*", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    // 점선 테두리 상자
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(180.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFFF9FAFB))
+                            .drawBehind {
+                                val stroke = Stroke(
+                                    width = 3f,
+                                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(15f, 15f), 0f)
+                                )
+                                drawRoundRect(
+                                    color = Color(0xFFD1D5DB),
+                                    style = stroke,
+                                    cornerRadius = CornerRadius(12.dp.toPx())
+                                )
+                            }
+                            .clickable(enabled = !isSubmitting) {
+                                showPhotoSourceDialog = true
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (selectedImageUri != null) {
+                            Box(modifier = Modifier.fillMaxSize()) {
+                                AsyncImage(
+                                    model = selectedImageUri,
+                                    contentDescription = "선택된 이미지",
+                                    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+                                    contentScale = ContentScale.Crop
+                                )
+                                // 이미지 위에 닫기 버튼 배치
+                                if (!isSubmitting) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(8.dp)
+                                            .size(24.dp)
+                                            .clip(CircleShape)
+                                            .background(Color.Black.copy(alpha = 0.6f))
+                                            .clickable { selectedImageUri = null },
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text("✕", color = Color.White, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        } else {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(56.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFEEF2FF)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        painter = painterResource(id = com.example.pickitpickit.R.drawable.ic_profile),
+                                        contentDescription = null,
+                                        tint = Color(0xFF3B6EF8),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Text("사진 추가하기", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text("클릭하여 이미지 업로드", fontSize = 11.sp, color = Color(0xFF9CA3AF))
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // 2. 제목 입력 (필수)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("제목", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text("*", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.Red)
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextField(
+                        value = title,
+                        onValueChange = {
+                            if (it.length <= titleLimit) title = it
+                        },
+                        enabled = !isSubmitting,
+                        placeholder = {
+                            Text("예: 드디어 뽑았어요! 🎉", fontSize = 13.sp, color = Color(0xFF9CA3AF))
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp)),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF9FAFB),
+                            unfocusedContainerColor = Color(0xFFF9FAFB),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF1F2937)),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "${title.length}/$titleLimit",
+                        fontSize = 11.sp,
+                        color = Color(0xFF9CA3AF),
+                        modifier = Modifier.align(Alignment.End)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 3. 설명 입력 (선택)
+                    Text("설명 (선택사항)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextField(
+                        value = description,
+                        onValueChange = {
+                            if (it.length <= descLimit) description = it
+                        },
+                        enabled = !isSubmitting,
+                        placeholder = {
+                            Text("뽑기 성공 스토리를 들려주세요!", fontSize = 13.sp, color = Color(0xFF9CA3AF))
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF9FAFB),
+                            unfocusedContainerColor = Color(0xFFF9FAFB),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF1F2937)),
+                        maxLines = 5
+                    )
+
+                    Spacer(modifier = Modifier.height(4.dp))
+
+                    Text(
+                        text = "${description.length}/$descLimit",
+                        fontSize = 11.sp,
+                        color = Color(0xFF9CA3AF),
+                        modifier = Modifier.align(Alignment.End)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 4. 매장명 (선택)
+                    Text("매장명 (선택사항)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    TextField(
+                        value = customStoreName,
+                        onValueChange = { customStoreName = it },
+                        enabled = !isSubmitting,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp)),
+                        colors = TextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFFF9FAFB),
+                            unfocusedContainerColor = Color(0xFFF9FAFB),
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent
+                        ),
+                        textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF1F2937)),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    // 5. 태그 입력 (선택, 최대 5개)
+                    Text("태그 (선택사항, 최대 5개)", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color(0xFF374151))
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TextField(
+                            value = tagInput,
+                            onValueChange = { tagInput = it },
+                            enabled = !isSubmitting,
+                            placeholder = {
+                                Text("태그 입력 후 추가 버튼", fontSize = 13.sp, color = Color(0xFF9CA3AF))
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(12.dp)),
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color(0xFFF9FAFB),
+                                unfocusedContainerColor = Color(0xFFF9FAFB),
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            textStyle = TextStyle(fontSize = 13.sp, color = Color(0xFF1F2937)),
+                            singleLine = true
+                        )
+
+                        Button(
+                            onClick = {
+                                val trimmed = tagInput.trim()
+                                if (trimmed.isNotEmpty() && tagsList.size < maxTags && !tagsList.contains(trimmed)) {
+                                    tagsList = tagsList + trimmed
+                                    tagInput = ""
+                                }
+                            },
+                            enabled = !isSubmitting,
+                            shape = RoundedCornerShape(10.dp),
+                            border = BorderStroke(1.dp, Color(0xFF3B6EF8)),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF3B6EF8)
+                            ),
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            Text("추가", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // 추가된 태그들 칩으로 표시
+                    if (tagsList.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        
+                        androidx.compose.foundation.lazy.LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(tagsList) { tag ->
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFFF5F3FF))
+                                        .padding(horizontal = 8.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "#$tag",
+                                        fontSize = 11.sp,
+                                        color = Color(0xFFAD46FF)
+                                    )
+                                    if (!isSubmitting) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = "✕",
+                                            fontSize = 10.sp,
+                                            color = Color(0xFF9CA3AF),
+                                            modifier = Modifier.clickable {
+                                                tagsList = tagsList.filter { it != tag }
+                                            }
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 하단 취소 / 게시하기 버튼 영역
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        enabled = !isSubmitting,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF6B7280)),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(46.dp)
+                    ) {
+                        Text("취소", fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                    }
+
+                    val buttonEnabled = selectedImageUri != null && title.isNotBlank() && !isSubmitting
+
+                    Button(
+                        onClick = {
+                            if (selectedImageUri == null) return@Button
+                            if (title.isBlank()) return@Button
+
+                            // 포맷에 맞춘 content 조립
+                            val finalContent = buildString {
+                                append(title)
+                                if (description.isNotBlank()) {
+                                    append("\n\n")
+                                    append(description)
+                                }
+                                if (customStoreName.isNotBlank()) {
+                                    append("\n\n📍")
+                                    append(customStoreName)
+                                }
+                                if (tagsList.isNotEmpty()) {
+                                    append("\n\n")
+                                    append(tagsList.joinToString(" ") { "#$it" })
+                                }
+                            }
+
+                            onSubmit(selectedImageUri!!, finalContent)
+                        },
+                        enabled = buttonEnabled,
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFFF9800),
+                            disabledContainerColor = Color(0xFFE5E7EB)
+                        ),
+                        modifier = Modifier
+                            .weight(1.5f)
+                            .height(46.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (isSubmitting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Send,
+                                    contentDescription = null,
+                                    tint = if (buttonEnabled) Color.White else Color(0xFF9CA3AF),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (bragToEdit != null) "수정하기" else "게시하기",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (buttonEnabled) Color.White else Color(0xFF9CA3AF)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────
+// 헬퍼: 자랑글 content 파싱 함수
+// ──────────────────────────────────────────────────────────────
+private fun parseBragContent(content: String): Tuple4<String, String?, String?, List<String>> {
+    val lines = content.split("\n\n")
+    if (lines.isEmpty()) return Tuple4("", null, null, emptyList())
+    val title = lines[0]
+    var description: String? = null
+    var storeName: String? = null
+    val tags = mutableListOf<String>()
+
+    if (lines.size > 1) {
+        val remaining = lines.subList(1, lines.size)
+        // 마지막 라인이 태그인지 확인
+        val lastLine = remaining.last().trim()
+        val isLastLineTags = lastLine.split(" ").all { it.startsWith("#") }
+        
+        val cleanRemaining = if (isLastLineTags) {
+            lastLine.split(" ").forEach {
+                val clean = it.removePrefix("#").trim()
+                if (clean.isNotEmpty()) tags.add(clean)
+            }
+            remaining.dropLast(1)
+        } else {
+            remaining
+        }
+        
+        val descLines = mutableListOf<String>()
+        cleanRemaining.forEach { line ->
+            if (line.trim().startsWith("📍")) {
+                storeName = line.trim().removePrefix("📍")
+            } else {
+                descLines.add(line)
+            }
+        }
+        if (descLines.isNotEmpty()) {
+            description = descLines.joinToString("\n\n")
+        }
+    }
+    return Tuple4(title, description, storeName, tags)
+}
+
+// kotlin에는 표준 Tuple4가 없으므로 간단히 데이터 클래스로 정의해서 쓴다.
+private data class Tuple4<out A, out B, out C, out D>(
+    val first: A,
+    val second: B,
+    val third: C,
+    val fourth: D
+)
+
+// ──────────────────────────────────────────────────────────────
 // Preview
 // ──────────────────────────────────────────────────────────────
 
@@ -1633,6 +2806,7 @@ fun StoreDetailScreenPreview() {
         StoreDetailScreen(
             storeDetail = dummyStore,
             reviewData = null,
+            bragData = null,
             onBackClick = {},
             onSubmitReview = { _, _, _ -> },
             isReviewSubmitting = false,
@@ -1640,7 +2814,12 @@ fun StoreDetailScreenPreview() {
             currentUserId = null,
             writeGuide = null,
             onEditReview = { _, _, _, _ -> },
-            onDeleteReview = {}
+            onDeleteReview = {},
+            isBragSubmitting = false,
+            bragSubmitResultFlow = kotlinx.coroutines.flow.MutableSharedFlow(),
+            onSubmitBrag = { _, _, _ -> },
+            onDeleteBrag = {},
+            onEditBrag = { _, _, _, _ -> }
         )
     }
 }
