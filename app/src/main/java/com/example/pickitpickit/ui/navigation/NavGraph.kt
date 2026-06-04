@@ -142,12 +142,14 @@ fun MainNavGraph(
                 // ── 성공 ───────────────────────────────────────────────
                 is StoreDetailUiState.Success -> {
                     val isReviewSubmitting by storeDetailViewModel.isReviewSubmitting.collectAsState()
+                    val isBragSubmitting by storeDetailViewModel.isBragSubmitting.collectAsState()
                     val currentUserId by storeDetailViewModel.currentUserId.collectAsState()
                     val writeGuide by storeDetailViewModel.writeGuide.collectAsState()
 
                     StoreDetailScreen(
                         storeDetail = state.detail,
                         reviewData = state.reviewData,
+                        bragData = state.bragData,
                         onBackClick = { navController.popBackStack() },
                         onSubmitReview = { rating, difficulty, content ->
                             storeDetailViewModel.submitReview(rating, difficulty, content)
@@ -161,6 +163,17 @@ fun MainNavGraph(
                         },
                         onDeleteReview = { reviewId ->
                             storeDetailViewModel.removeReview(reviewId)
+                        },
+                        isBragSubmitting = isBragSubmitting,
+                        bragSubmitResultFlow = storeDetailViewModel.bragSubmitResult,
+                        onSubmitBrag = { spentCost, imageUrl, content ->
+                            storeDetailViewModel.submitBrag(spentCost, imageUrl, content)
+                        },
+                        onDeleteBrag = { bragId ->
+                            storeDetailViewModel.removeBrag(bragId)
+                        },
+                        onEditBrag = { bragId, spentCost, imageUrl, content ->
+                            storeDetailViewModel.editBrag(bragId, spentCost, imageUrl, content)
                         }
                     )
                 }
