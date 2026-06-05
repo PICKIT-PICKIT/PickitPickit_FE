@@ -61,5 +61,12 @@ interface ReviewApi {
      */
     @GET("api/reviews/write-guide")
     suspend fun getReviewWriteGuide(): Response<ApiResponse<ReviewWriteGuideResponse>>
+
+    /**
+     * 현재 로그인 사용자가 작성한 리뷰 목록을 조회합니다.
+     * GET /api/users/me/reviews
+     */
+    @GET("api/users/me/reviews")
+    suspend fun getUserReviews(): Response<ApiResponse<List<ReviewDto>>>
 }
 

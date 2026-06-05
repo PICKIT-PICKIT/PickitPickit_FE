@@ -23,6 +23,8 @@ data class MyPageState(
     val userId: Long = 0,
     val kakaoProfileImageUrl: String? = null,
     val kakaoEmail: String = "",
+    val reviewCount: Int = 0,
+    val bragCount: Int = 0,
     
     // Default Images and tags for profile editing
     val defaultProfileImages: List<DefaultProfileImageResponse> = emptyList(),
@@ -110,6 +112,8 @@ class MyPageViewModel : ViewModel() {
                         defaultProfileImages = defaultImages,
                         backendDefaultProfileImages = backendDefaultImages,
                         availableTags = availableTags,
+                        reviewCount = profile.reviewCount,
+                        bragCount = profile.bragCount,
                         isLoading = false
                     )
                 }

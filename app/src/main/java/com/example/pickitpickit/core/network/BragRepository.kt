@@ -104,4 +104,21 @@ class BragRepository {
             null
         }
     }
+
+    suspend fun getUserBrags(): List<BragDto>? {
+        return try {
+            val response = RetrofitClient.bragApi.getUserBrags()
+            if (response.isSuccessful && response.body()?.success == true) {
+                val detail = response.body()!!.data
+                Log.i("BRAG_REPO", "사용자 자랑글 조회 성공: count=${detail?.size ?: 0}")
+                detail
+            } else {
+                Log.w("BRAG_REPO", "사용자 자랑글 조회 실패: ${response.body()?.message}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("BRAG_REPO", "사용자 자랑글 조회 네트워크 에러", e)
+            null
+        }
+    }
 }

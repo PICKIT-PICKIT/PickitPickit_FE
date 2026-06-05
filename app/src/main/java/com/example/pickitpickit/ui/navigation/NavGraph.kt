@@ -29,6 +29,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.example.pickitpickit.ui.home.HomeScreen
 import com.example.pickitpickit.ui.mypage.MyPageScreen
+import com.example.pickitpickit.ui.mypage.MyReviewsScreen
+import com.example.pickitpickit.ui.mypage.MyBragsScreen
 import com.example.pickitpickit.ui.store.StoreDetailScreen
 import com.example.pickitpickit.ui.store.StoreDetailUiState
 import com.example.pickitpickit.ui.store.StoreDetailViewModel
@@ -59,7 +61,17 @@ fun MainNavGraph(
             )
         }
         composable(BottomNavMenuItem.MyPage.route) {
-            MyPageScreen(onLogoutClick = onLogoutClick)
+            MyPageScreen(
+                onLogoutClick = onLogoutClick,
+                onMyReviewsClick = { navController.navigate("my_reviews") },
+                onMyBragsClick = { navController.navigate("my_brags") }
+            )
+        }
+        composable("my_reviews") {
+            MyReviewsScreen(onBackClick = { navController.popBackStack() })
+        }
+        composable("my_brags") {
+            MyBragsScreen(onBackClick = { navController.popBackStack() })
         }
         composable(
             route = "store_detail/{storeId}",

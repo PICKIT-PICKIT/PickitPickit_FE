@@ -5,6 +5,7 @@ import com.example.pickitpickit.core.model.ReviewRequest
 import com.example.pickitpickit.core.model.ReviewPatchRequest
 import com.example.pickitpickit.core.model.ReviewWriteGuideResponse
 import com.example.pickitpickit.core.model.StoreReviewListResponse
+import com.example.pickitpickit.core.model.ReviewDto
 
 class ReviewRepository {
 
@@ -118,6 +119,23 @@ class ReviewRepository {
             }
         } catch (e: Exception) {
             Log.e("REVIEW_REPO", "리뷰 가이드 조회 네트워크 에러", e)
+            null
+        }
+    }
+
+    suspend fun getUserReviews(): List<ReviewDto>? {
+        return try {
+            val response = RetrofitClient.reviewApi.getUserReviews()
+            if (response.isSuccessful && response.body()?.success == true) {
+                val list = response.body()!!.data
+                Log.i("REVIEW_REPO", "사용자 리뷰 조회 성공: count=${list?.size ?: 0}")
+                list
+            } else {
+                Log.w("REVIEW_REPO", "사용자 리뷰 조회 실패: ${response.body()?.message}")
+                null
+            }
+        } catch (e: Exception) {
+            Log.e("REVIEW_REPO", "사용자 리뷰 조회 네트워크 에러", e)
             null
         }
     }
