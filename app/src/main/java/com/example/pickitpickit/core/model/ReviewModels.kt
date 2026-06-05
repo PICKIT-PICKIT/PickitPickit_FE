@@ -13,7 +13,8 @@ data class ReviewDto(
     val content: String?,
     val imageUrl: String?,
     val createdAt: String,
-    val modifiedAt: String
+    val modifiedAt: String,
+    val storeName: String? = null
 )
 
 // 매장 리뷰 목록 및 요약 응답 DTO

@@ -50,4 +50,11 @@ interface BragApi {
      */
     @GET("api/reviews/brags")
     suspend fun getAllBrags(): Response<ApiResponse<List<BragDto>>>
+
+    /**
+     * 현재 로그인 사용자가 작성한 자랑하기 목록을 조회합니다.
+     * GET /api/users/me/brags
+     */
+    @GET("api/users/me/brags")
+    suspend fun getUserBrags(): Response<ApiResponse<List<BragDto>>>
 }

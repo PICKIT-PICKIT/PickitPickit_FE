@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,6 +53,8 @@ import com.example.pickitpickit.ui.theme.PickitPickitTheme
 @Composable
 fun MyPageScreen(
     onLogoutClick: () -> Unit,
+    onMyReviewsClick: () -> Unit,
+    onMyBragsClick: () -> Unit,
     myPageViewModel: MyPageViewModel = viewModel()
 ) {
     val uiState by myPageViewModel.uiState.collectAsState()
@@ -110,7 +113,9 @@ fun MyPageScreen(
                 // 회원 탈퇴 성공 시 로그아웃과 마찬가지로 Onboarding/Login 화면으로 전환
                 onLogoutClick()
             }
-        }
+        },
+        onMyReviewsClick = onMyReviewsClick,
+        onMyBragsClick = onMyBragsClick
     )
 }
 
@@ -119,7 +124,9 @@ internal fun MyPageScreenContent(
     uiState: MyPageState,
     onLogoutClick: () -> Unit,
     onEditClick: () -> Unit,
-    onDeleteAccountClick: () -> Unit
+    onDeleteAccountClick: () -> Unit,
+    onMyReviewsClick: () -> Unit,
+    onMyBragsClick: () -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
@@ -309,18 +316,27 @@ internal fun MyPageScreenContent(
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                SectionLabel(text = "계정")
+                SectionLabel(text = "내 활동")
                 SettingsCard {
                     SettingsItem(
-                        icon = Icons.AutoMirrored.Filled.ExitToApp,
+                        iconRes = R.drawable.ic_star,
                         iconTint = Color(0xFF5393FA),
-                        title = "로그아웃",
-                        subtitle = "계정에서 로그아웃",
-                        onClick = onLogoutClick
+                        title = "작성한 리뷰",
+                        subtitle = "내가 작성한 리뷰 ${uiState.reviewCount}개",
+                        onClick = onMyReviewsClick
+                    )
+                    HorizontalDivider(color = Color(0xFFF0F0F0), thickness = 0.7.dp)
+                    SettingsItem(
+                        iconRes = R.drawable.ic_tag,
+                        iconTint = Color(0xFF5393FA),
+                        title = "작성한 자랑하기",
+                        subtitle = "내가 작성한 게시물 ${uiState.bragCount}개",
+                        onClick = onMyBragsClick
                     )
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
+
 
                 SectionLabel(text = "위치 설정")
                 SettingsCard {
@@ -427,9 +443,9 @@ internal fun MyPageScreenContent(
                             )
                         }
                         Spacer(modifier = Modifier.height(10.dp))
-                        Text("✓ 기본 검색 거리: 3km", fontSize = 12.sp, color = Color(0xFF5A3400))
+                        Text("✓ 기본 검색 거리: 1km", fontSize = 12.sp, color = Color(0xFF5A3400))
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text("✓ 거리 필터는 0.5km ~ 10km까지 설정 가능합니다", fontSize = 12.sp, color = Color(0xFF5A3400))
+                        Text("✓ 거리 필터는 0.5km ~ 5km까지 설정 가능합니다", fontSize = 12.sp, color = Color(0xFF5A3400))
                     }
                 }
 
@@ -448,29 +464,77 @@ internal fun MyPageScreenContent(
                             .alpha(0.35f)
                     )
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("샒끄샘끊 - 인형뚝기 & 가차 찾기", fontSize = 11.sp, color = Color.Gray)
+                    Text("삐끼삐끼 - 인형뽑기 & 가챠 찾기", fontSize = 11.sp, color = Color.Gray)
                     Text("© 2026 PikiPiki. All rights reserved.", fontSize = 10.sp, color = Color.LightGray)
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
 
+                // ── 로그아웃 버튼 (Figma 스타일) ────────────────────────
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(66.dp)
+                        .background(Color(0xFFFF9635), RoundedCornerShape(14.dp))
+                        .clickable(onClick = onLogoutClick)
+                        .padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(Color(0xFFFF6900), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "로그아웃",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp,
+                            color = Color(0xFF4A2800)
+                        )
+                        Text(
+                            text = "계정에서 로그아웃",
+                            fontSize = 11.sp,
+                            color = Color(0xFF5A3400)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = Color(0xFF4A2800),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ── 회원 탈퇴하기 버튼 ────────────────────────
                 Button(
                     onClick = { showDeleteConfirmDialog = true },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
                     shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444))
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF3333))
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Person,
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "회원 탈퇴",
+                        text = "회원 탈퇴하기",
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
                         fontSize = 16.sp
@@ -742,7 +806,9 @@ fun MyPageScreenPreview() {
             uiState = dummyState,
             onLogoutClick = {},
             onEditClick = {},
-            onDeleteAccountClick = {}
+            onDeleteAccountClick = {},
+            onMyReviewsClick = {},
+            onMyBragsClick = {}
         )
     }
 }
@@ -755,7 +821,9 @@ fun MyPageScreenLoadingPreview() {
             uiState = MyPageState(isLoading = true),
             onLogoutClick = {},
             onEditClick = {},
-            onDeleteAccountClick = {}
+            onDeleteAccountClick = {},
+            onMyReviewsClick = {},
+            onMyBragsClick = {}
         )
     }
 }
