@@ -31,8 +31,18 @@ class ReviewViewModel(private val storeId: Long) : ViewModel() {
     private val _submitResult = MutableSharedFlow<String?>()
     val submitResult: SharedFlow<String?> = _submitResult.asSharedFlow()
 
+    private val _currentUserId = MutableStateFlow<Long?>(null)
+    val currentUserId: StateFlow<Long?> = _currentUserId.asStateFlow()
+
     init {
         loadReviews()
+        loadUserId()
+    }
+
+    private fun loadUserId() {
+        viewModelScope.launch {
+            _currentUserId.value = GlobalApplication.userPreferences.getUserId().first()
+        }
     }
 
     fun loadReviews() {
@@ -59,6 +69,21 @@ class ReviewViewModel(private val storeId: Long) : ViewModel() {
             if (errorMsg == null) {
                 _submitResult.emit("CREATE_SUCCESS")
                 // 작성 성공 시 목록 다시 로드
+                loadReviews()
+            } else {
+                _submitResult.emit(errorMsg)
+            }
+            _isLoading.update { false }
+        }
+    }
+
+    fun deleteReview(reviewId: Long) {
+        viewModelScope.launch {
+            _isLoading.update { true }
+            val userId = GlobalApplication.userPreferences.getUserId().first() ?: 0L
+            val errorMsg = repository.deleteReview(reviewId, userId)
+            if (errorMsg == null) {
+                _submitResult.emit("DELETE_SUCCESS")
                 loadReviews()
             } else {
                 _submitResult.emit(errorMsg)
