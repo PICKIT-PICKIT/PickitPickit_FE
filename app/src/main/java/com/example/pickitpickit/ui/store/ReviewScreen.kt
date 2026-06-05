@@ -21,6 +21,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -47,22 +48,60 @@ fun ReviewScreen(
 
     val reviewState by viewModel.reviewState.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
+    val currentUserId by viewModel.currentUserId.collectAsState()
 
     var showWriteDialog by remember { mutableStateOf(false) }
+    var reviewToDelete by remember { mutableStateOf<Long?>(null) }
     val context = LocalContext.current
 
-    // 리뷰 작성 결과에 따른 다이얼로그 처리 및 토스트 메시지
+    // 리뷰 작성/삭제 결과에 따른 다이얼로그 처리 및 토스트 메시지
     LaunchedEffect(Unit) {
         viewModel.submitResult.collect { result ->
             result?.let { msg ->
-                if (msg == "CREATE_SUCCESS" || msg.isEmpty()) {
-                    Toast.makeText(context, "리뷰가 성공적으로 등록되었습니다!", Toast.LENGTH_SHORT).show()
-                    showWriteDialog = false
-                } else {
-                    Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                when (msg) {
+                    "CREATE_SUCCESS" -> {
+                        Toast.makeText(context, "리뷰가 성공적으로 등록되었습니다!", Toast.LENGTH_SHORT).show()
+                        showWriteDialog = false
+                    }
+                    "DELETE_SUCCESS" -> {
+                        Toast.makeText(context, "리뷰가 성공적으로 삭제되었습니다.", Toast.LENGTH_SHORT).show()
+                    }
+                    else -> {
+                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                    }
                 }
             }
         }
+    }
+
+    // 리뷰 삭제 확인 다이얼로그
+    if (reviewToDelete != null) {
+        AlertDialog(
+            onDismissRequest = { reviewToDelete = null },
+            title = { Text("리뷰 삭제", fontWeight = FontWeight.Bold) },
+            text = { Text("작성하신 리뷰를 정말로 삭제하시겠습니까?") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        reviewToDelete?.let { viewModel.deleteReview(it) }
+                        reviewToDelete = null
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF4444)),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("삭제", color = Color.White)
+                }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    onClick = { reviewToDelete = null },
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text("취소", color = Color.Gray)
+                }
+            },
+            containerColor = Color.White
+        )
     }
 
     Scaffold(
@@ -134,7 +173,9 @@ fun ReviewScreen(
                     // 리뷰 목록
                     ReviewListContent(
                         data = data,
-                        onWriteClick = { showWriteDialog = true }
+                        currentUserId = currentUserId,
+                        onWriteClick = { showWriteDialog = true },
+                        onDeleteClick = { reviewToDelete = it }
                     )
                 }
             }
@@ -246,13 +287,15 @@ private fun ReviewEmptyState(
 @Composable
 private fun ReviewListContent(
     data: StoreReviewListResponse,
-    onWriteClick: () -> Unit
+    currentUserId: Long?,
+    onWriteClick: () -> Unit,
+    onDeleteClick: (Long) -> Unit
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 32.dp)
     ) {
-        // ── 1. 통계 헤더 (별점 요약 + 난이도 요약) ────────────────
+        // ── 1. 통계 헤더 (별점 분포도 렌더링) ────────────────
         item {
             ReviewSummaryHeader(data = data)
         }
@@ -290,7 +333,11 @@ private fun ReviewListContent(
 
         // ── 3. 리뷰 리스트 ───────────────────────────────────────
         items(data.reviews) { review ->
-            ReviewItemCard(review = review)
+            ReviewItemCard(
+                review = review,
+                currentUserId = currentUserId,
+                onDeleteClick = onDeleteClick
+            )
         }
     }
 }
@@ -300,6 +347,19 @@ private fun ReviewListContent(
 // ──────────────────────────────────────────────────────────────
 @Composable
 private fun ReviewSummaryHeader(data: StoreReviewListResponse) {
+    // 5점부터 1점까지의 평점 개수 집계
+    val ratingCounts = remember(data.reviews) {
+        val counts = IntArray(6) // 0~5 index
+        data.reviews.forEach { r ->
+            val star = r.rating.toInt()
+            if (star in 1..5) {
+                counts[star]++
+            }
+        }
+        counts
+    }
+    val totalReviews = data.reviewCount
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -312,83 +372,106 @@ private fun ReviewSummaryHeader(data: StoreReviewListResponse) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceEvenly
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // 별점 요약
+            // 좌측: 평균 평점 요약
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1.2f)
             ) {
                 Text(
-                    text = "평균 별점",
-                    fontSize = 12.sp,
+                    text = String.format("%.1f", data.averageRating),
+                    fontSize = 38.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF1A1A2E)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    val average = data.averageRating.toInt()
+                    for (i in 1..5) {
+                        val isYellow = i <= average
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = if (isYellow) Color(0xFFFFCA28) else Color(0xFFE0E0E0),
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "${totalReviews}개 리뷰",
+                    fontSize = 11.sp,
                     color = Color(0xFF6B7280),
                     fontWeight = FontWeight.Medium
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Star,
-                        contentDescription = null,
-                        tint = Color(0xFFFFCA28),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = String.format("%.1f", data.averageRating),
-                        fontSize = 26.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = Color(0xFF1A1A2E)
-                    )
-                }
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "총 ${data.reviewCount}개의 평가",
-                    fontSize = 11.sp,
-                    color = Color(0xFF9CA3AF)
                 )
             }
 
-            // 구분선
+            // 세로 구분선
             Box(
                 modifier = Modifier
                     .width(1.dp)
-                    .height(50.dp)
+                    .height(80.dp)
                     .background(Color(0xFFE5E7EB))
             )
 
-            // 난이도 요약
+            Spacer(modifier = Modifier.width(12.dp))
+
+            // 우측: 평점별 가로 막대 그래프 리스트
             Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1.8f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = "체감 평균 난이도",
-                    fontSize = 12.sp,
-                    color = Color(0xFF6B7280),
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                val diffLabel = when {
-                    data.averageDifficulty <= 1.5 -> "쉬움 😊"
-                    data.averageDifficulty <= 2.5 -> "보통 쉬움 🙂"
-                    data.averageDifficulty <= 3.5 -> "보통 😐"
-                    data.averageDifficulty <= 4.5 -> "어려움 😅"
-                    else -> "극악 😱"
+                for (star in 5 downTo 1) {
+                    val count = ratingCounts[star]
+                    val progress = if (totalReviews > 0) count.toFloat() / totalReviews else 0f
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = star.toString(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF555555),
+                            modifier = Modifier.width(10.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.Star,
+                            contentDescription = null,
+                            tint = Color(0xFFFFCA28),
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        // 평점 비율 바
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(Color(0xFFE5E7EB))
+                        ) {
+                            if (progress > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .fillMaxWidth(progress)
+                                        .background(Color(0xFFFF9635), RoundedCornerShape(4.dp))
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = count.toString(),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFF777777),
+                            modifier = Modifier.width(14.dp),
+                            textAlign = TextAlign.End
+                        )
+                    }
                 }
-                Text(
-                    text = diffLabel,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF3B6EF8)
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = String.format("난이도 수치: %.1f", data.averageDifficulty),
-                    fontSize = 11.sp,
-                    color = Color(0xFF9CA3AF)
-                )
             }
         }
     }
@@ -398,7 +481,11 @@ private fun ReviewSummaryHeader(data: StoreReviewListResponse) {
 // 리뷰 개별 카드 UI
 // ──────────────────────────────────────────────────────────────
 @Composable
-private fun ReviewItemCard(review: ReviewDto) {
+private fun ReviewItemCard(
+    review: ReviewDto,
+    currentUserId: Long?,
+    onDeleteClick: (Long) -> Unit
+) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -415,7 +502,7 @@ private fun ReviewItemCard(review: ReviewDto) {
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // 프로필 이미지
+                // 프로필 이미지 및 플레이스홀더 서클 처리
                 if (!review.authorProfileImageUrl.isNullOrEmpty()) {
                     AsyncImage(
                         model = review.authorProfileImageUrl,
@@ -426,21 +513,32 @@ private fun ReviewItemCard(review: ReviewDto) {
                         contentScale = ContentScale.Crop
                     )
                 } else {
-                    // 기본 아이콘
+                    // 닉네임 첫 자를 텍스트로 한 파스텔톤 임시 프로필 이미지
+                    val firstChar = review.authorNickname.firstOrNull()?.toString() ?: "👤"
+                    val colors = listOf(
+                        Color(0xFF8B5CF6), Color(0xFF3B82F6), Color(0xFF10B981), Color(0xFFF59E0B),
+                        Color(0xFFEF4444), Color(0xFFEC4899), Color(0xFF14B8A6), Color(0xFF6366F1)
+                    )
+                    val backgroundColor = colors[java.lang.Math.abs(review.authorNickname.hashCode()) % colors.size]
                     Box(
                         modifier = Modifier
                             .size(36.dp)
                             .clip(CircleShape)
-                            .background(Color(0xFFF3F4F6)),
+                            .background(backgroundColor),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("👤", fontSize = 16.sp)
+                        Text(
+                            text = firstChar,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
                     }
                 }
 
                 Spacer(modifier = Modifier.width(10.dp))
 
-                // 닉네임 & 날짜
+                // 닉네임 & 상대 날짜 표시
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = review.authorNickname,
@@ -449,11 +547,27 @@ private fun ReviewItemCard(review: ReviewDto) {
                         color = Color(0xFF1A1A2E)
                     )
                     Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = review.createdAt.split("T").firstOrNull() ?: review.createdAt,
-                        fontSize = 11.sp,
-                        color = Color(0xFF9CA3AF)
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = getRelativeTimeString(review.createdAt),
+                            fontSize = 11.sp,
+                            color = Color(0xFF9CA3AF)
+                        )
+                        if (review.userId == currentUserId) {
+                            Text(
+                                text = " • ",
+                                fontSize = 11.sp,
+                                color = Color(0xFF9CA3AF)
+                            )
+                            Text(
+                                text = "삭제",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFEF4444),
+                                modifier = Modifier.clickable { onDeleteClick(review.reviewId) }
+                            )
+                        }
+                    }
                 }
 
                 // 별점 표시
@@ -475,29 +589,6 @@ private fun ReviewItemCard(review: ReviewDto) {
             }
 
             Spacer(modifier = Modifier.height(12.dp))
-
-            // 난이도 태그
-            review.difficultyLabel?.let { label ->
-                val tagColor = when (review.difficulty) {
-                    in 1..2 -> Color(0xFF10B981) // 쉬움 (초록)
-                    3 -> Color(0xFF3B82F6)      // 보통 (파랑)
-                    else -> Color(0xFFEF4444)    // 어려움 (빨강)
-                }
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(tagColor.copy(alpha = 0.1f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        text = "난이도: $label",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = tagColor
-                    )
-                }
-                Spacer(modifier = Modifier.height(10.dp))
-            }
 
             // 리뷰 내용
             if (!review.content.isNullOrEmpty()) {
@@ -800,6 +891,39 @@ fun ReviewWriteDialog(
                     }
                 }
             }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────
+// 헬퍼: 상대 시간 포맷팅 유틸리티
+// ──────────────────────────────────────────────────────────────
+private fun getRelativeTimeString(createdAtStr: String): String {
+    return try {
+        val cleanedStr = if (createdAtStr.contains(".") && !createdAtStr.endsWith("Z")) {
+            createdAtStr.split(".")[0]
+        } else {
+            createdAtStr
+        }
+        val formatter = java.time.format.DateTimeFormatter.ISO_DATE_TIME
+        val dateTime = java.time.LocalDateTime.parse(cleanedStr.removeSuffix("Z"), formatter)
+        val now = java.time.LocalDateTime.now()
+        val duration = java.time.Duration.between(dateTime, now)
+        val seconds = duration.seconds
+        
+        when {
+            seconds < 0 -> "방금 전"
+            seconds < 60 -> "방금 전"
+            seconds < 3600 -> "${seconds / 60}분 전"
+            seconds < 86400 -> "${seconds / 3600}시간 전"
+            seconds < 2592000 -> "${seconds / 86400}일 전"
+            else -> createdAtStr.split("T").firstOrNull() ?: createdAtStr
+        }
+    } catch (e: Exception) {
+        try {
+            createdAtStr.split("T").firstOrNull() ?: createdAtStr
+        } catch (ex: Exception) {
+            createdAtStr
         }
     }
 }
