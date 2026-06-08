@@ -194,10 +194,10 @@ fun StoreDetailScreen(
                 totalStock = storeDetail.totalStockQuantity,
                 productCount = storeDetail.productCount,
                 nearExpiredCount = storeDetail.products.count {
-                    it.stockStatus == "NEAR_EMPTY" || it.stockStatus == "마감임박"
+                    it.stockQuantity in 1..10
                 },
                 emptyCount = storeDetail.products.count {
-                    it.stockStatus == "EMPTY" || it.stockStatus == "품절"
+                    it.stockQuantity <= 0
                 }
             )
         }
@@ -864,11 +864,13 @@ private fun ProductSectionHeader(totalCount: Int) {
 
 @Composable
 private fun ProductListItem(product: ProductDto) {
-    val stockStatus = when (product.stockStatus?.uppercase()) {
-        "NEAR_EMPTY", "마감임박" -> "마감임박" to Color(0xFFEF4444)
-        "EMPTY", "품절" -> "품절" to Color(0xFF9E9E9E)
-        "PLENTY", "재고충분" -> "재고충분" to Color(0xFF22C55E)
-        else -> "보통" to Color(0xFF3B82F6)
+    val stockStatus = when {
+        product.stockQuantity <= 0 -> "품절" to Color(0xFF9E9E9E)
+        product.stockQuantity <= 10 -> "마감임박" to Color(0xFFEF4444)
+        else -> when (product.stockStatus?.uppercase()) {
+            "PLENTY", "재고충분", "SUFFICIENT", "IN_STOCK" -> "재고충분" to Color(0xFF22C55E)
+            else -> "보통" to Color(0xFF3B82F6)
+        }
     }
 
     val difficultyLabel = when {
@@ -894,9 +896,10 @@ private fun ProductListItem(product: ProductDto) {
             // 상품 이미지
             Box(
                 modifier = Modifier
-                    .size(72.dp)
+                    .size(80.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color(0xFFEEEEEE))
+                    .background(Color(0xFFF1F5F9)),
+                contentAlignment = Alignment.Center
             ) {
                 if (!product.imageUrl.isNullOrEmpty()) {
                     AsyncImage(
@@ -905,17 +908,34 @@ private fun ProductListItem(product: ProductDto) {
                         modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
                         contentScale = ContentScale.Crop
                     )
+                } else {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(4.dp)
+                    ) {
+                        Text("🧸", fontSize = 18.sp)
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            "이미지 없음",
+                            fontSize = 8.sp,
+                            color = Color(0xFF94A3B8),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 10.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
                 }
                 // 재고 상태 뱃지
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
                         .padding(4.dp)
-                        .clip(RoundedCornerShape(6.dp))
+                        .clip(RoundedCornerShape(3.dp))
                         .background(stockStatus.second)
-                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                        .padding(horizontal = 3.dp, vertical = 0.dp)
                 ) {
-                    Text(stockStatus.first, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    Text(stockStatus.first, color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold, lineHeight = 10.sp)
                 }
             }
 

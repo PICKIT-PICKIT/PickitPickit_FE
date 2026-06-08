@@ -25,6 +25,8 @@ data class MyPageState(
     val kakaoEmail: String = "",
     val reviewCount: Int = 0,
     val bragCount: Int = 0,
+    val localPushEnabled: Boolean = true,
+    val searchRadius: Int = 1000,
     
     // Default Images and tags for profile editing
     val defaultProfileImages: List<DefaultProfileImageResponse> = emptyList(),
@@ -50,6 +52,48 @@ class MyPageViewModel : ViewModel() {
 
     init {
         loadUserProfile()
+        observeSettings()
+    }
+
+    private fun observeSettings() {
+        viewModelScope.launch {
+            try {
+                GlobalApplication.userPreferences.isPushNotificationsEnabled.collect { enabled ->
+                    _uiState.update { it.copy(localPushEnabled = enabled) }
+                }
+            } catch (e: Exception) {
+                Log.e("MY_PAGE_VIEW_MODEL", "Failed to collect push notification setting", e)
+            }
+        }
+        viewModelScope.launch {
+            try {
+                GlobalApplication.userPreferences.searchRadius.collect { radius ->
+                    _uiState.update { it.copy(searchRadius = radius) }
+                }
+            } catch (e: Exception) {
+                Log.e("MY_PAGE_VIEW_MODEL", "Failed to collect search radius setting", e)
+            }
+        }
+    }
+
+    fun setPushNotificationsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            try {
+                GlobalApplication.userPreferences.setPushNotificationsEnabled(enabled)
+            } catch (e: Exception) {
+                Log.e("MY_PAGE_VIEW_MODEL", "Failed to update push notification setting", e)
+            }
+        }
+    }
+
+    fun setSearchRadius(radius: Int) {
+        viewModelScope.launch {
+            try {
+                GlobalApplication.userPreferences.setSearchRadius(radius)
+            } catch (e: Exception) {
+                Log.e("MY_PAGE_VIEW_MODEL", "Failed to update search radius setting", e)
+            }
+        }
     }
 
     fun loadUserProfile() {
@@ -286,6 +330,9 @@ class MyPageViewModel : ViewModel() {
                 // 로컬 세션 토큰 및 설정 캐시 전면 초기화
                 GlobalApplication.userPreferences.clearTokens()
                 GlobalApplication.userPreferences.clearAll()
+                // clearAll() 이후에 저장해야 지워지지 않음
+                // 탈퇴 후 재로그인 시 온보딩을 강제로 다시 시작하기 위한 플래그
+                GlobalApplication.userPreferences.setIsWithdrawn(true)
                 _uiState.update { MyPageState() } // 상태 리셋
                 onSuccess()
             }
