@@ -4,6 +4,7 @@ import android.util.Log
 import com.example.pickitpickit.core.datastore.UserPreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.Interceptor
@@ -22,23 +23,64 @@ class AuthInterceptor(
     private val userPreferences: UserPreferences
 ) : Interceptor {
 
-    override fun intercept(chain: Interceptor.Chain): Response {
-        // 🌟 Dispatchers.IO 컨텍스트를 명시 지정하여 OkHttp와 DataStore 간의 스레드 교착 상태(Deadlock) 원천 차단!
-        val token = runBlocking(Dispatchers.IO) {
+    @Volatile
+    private var cachedAccessToken: String? = null
+
+    @Volatile
+    private var cachedRefreshToken: String? = null
+
+    private val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)
+
+    init {
+        // 백그라운드 코루틴을 통해 DataStore Flow 데이터를 인메모리 캐시 변수로 상시 실시간 갱신
+        scope.launch {
             try {
-                withTimeoutOrNull(2000) {
-                    userPreferences.getAccessToken().first()
+                userPreferences.getAccessToken().collect { token ->
+                    cachedAccessToken = token
                 }
             } catch (e: Exception) {
-                Log.e("AUTH_INTERCEPTOR", "DataStore 토큰 로딩 중 예외 발생", e)
-                null
+                Log.e("AUTH_INTERCEPTOR", "Access Token 캐시 갱신 실패", e)
             }
+        }
+        scope.launch {
+            try {
+                userPreferences.getRefreshToken().collect { token ->
+                    cachedRefreshToken = token
+                }
+            } catch (e: Exception) {
+                Log.e("AUTH_INTERCEPTOR", "Refresh Token 캐시 갱신 실패", e)
+            }
+        }
+    }
+
+    override fun intercept(chain: Interceptor.Chain): Response {
+        // 1. 인메모리 캐시를 우선 확인하여 runBlocking 및 DataStore Lock에 의한 데드락 완전 회피
+        var token = cachedAccessToken
+        if (token == null) {
+            // 앱 초기 구동 시점 극초기 등 캐시 수집 전인 경우에만 1회 동기식 블락 조회
+            token = runBlocking(Dispatchers.IO) {
+                try {
+                    withTimeoutOrNull(500) {
+                        userPreferences.getAccessToken().first()
+                    }
+                } catch (e: Exception) {
+                    Log.e("AUTH_INTERCEPTOR", "최초 DataStore 토큰 로딩 중 예외 발생", e)
+                    null
+                }
+            }
+            cachedAccessToken = token
         }
 
         val request = chain.request()
         val requestBuilder = request.newBuilder()
+        val urlPath = request.url.encodedPath
 
-        if (!token.isNullOrEmpty()) {
+        // 로그인, 토큰 재발급, 로그아웃 등 인증이 필요 없는 API는 Authorization 헤더 추가 방지
+        val isNoAuthApi = urlPath.contains("/api/auth/kakao/login") || 
+                          urlPath.contains("/api/auth/token/reissue") ||
+                          urlPath.contains("/api/auth/logout")
+
+        if (!token.isNullOrEmpty() && !isNoAuthApi) {
             requestBuilder.addHeader("Authorization", "Bearer $token")
         }
 
@@ -46,17 +88,17 @@ class AuthInterceptor(
 
         // 401 Unauthorized인 경우 토큰 재발급 자동 시도
         if (response.code == 401) {
-            val urlPath = request.url.encodedPath
+            val retryUrlPath = request.url.encodedPath
             // 무한 루프 방지: 로그인/재발급/로그아웃 관련 요청은 재발급 대상에서 제외
-            if (!urlPath.contains("/api/auth/token/reissue") && 
-                !urlPath.contains("/api/auth/kakao/login") && 
-                !urlPath.contains("/api/auth/logout")
+            if (!retryUrlPath.contains("/api/auth/token/reissue") && 
+                !retryUrlPath.contains("/api/auth/kakao/login") && 
+                !retryUrlPath.contains("/api/auth/logout")
             ) {
                 synchronized(this) {
-                    // 재발급 시도 전, 다른 스레드에서 이미 토큰이 갱신되었는지 최신 토큰 확인
-                    val currentToken = runBlocking(Dispatchers.IO) {
+                    // 재발급 시도 전, 다른 스레드에서 이미 토큰이 갱신되었는지 최신 캐시 토큰 확인
+                    val currentToken = cachedAccessToken ?: runBlocking(Dispatchers.IO) {
                         try {
-                            withTimeoutOrNull(1000) {
+                            withTimeoutOrNull(500) {
                                 userPreferences.getAccessToken().first()
                             }
                         } catch (e: Exception) {
@@ -74,9 +116,9 @@ class AuthInterceptor(
                     }
 
                     // 토큰 재발급 진행을 위해 Refresh Token 획득
-                    val refreshToken = runBlocking(Dispatchers.IO) {
+                    val refreshToken = cachedRefreshToken ?: runBlocking(Dispatchers.IO) {
                         try {
-                            withTimeoutOrNull(1000) {
+                            withTimeoutOrNull(500) {
                                 userPreferences.getRefreshToken().first()
                             }
                         } catch (e: Exception) {
@@ -88,15 +130,7 @@ class AuthInterceptor(
                         Log.w("AUTH_INTERCEPTOR", "토큰 만료 감지 (HTTP 401) -> 토큰 동기식 재발급 시도 시작 🔄")
                         val isReissueSuccess = reissueTokenSynchronously(refreshToken)
                         if (isReissueSuccess) {
-                            val nextToken = runBlocking(Dispatchers.IO) {
-                                try {
-                                    withTimeoutOrNull(1000) {
-                                        userPreferences.getAccessToken().first()
-                                    }
-                                } catch (e: Exception) {
-                                    null
-                                }
-                            }
+                            val nextToken = cachedAccessToken
                             if (!nextToken.isNullOrEmpty()) {
                                 Log.i("AUTH_INTERCEPTOR", "토큰 재발급 성공! 새로운 AccessToken으로 원래 요청 재시도 진행 🚀")
                                 response.close()

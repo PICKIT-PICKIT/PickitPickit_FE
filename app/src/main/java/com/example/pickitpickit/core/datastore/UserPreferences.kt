@@ -24,6 +24,8 @@ class UserPreferences(private val context: Context) {
     private val ONBOARDING_COMPLETED_KEY = booleanPreferencesKey("onboarding_completed")
     private val PUSH_NOTIFICATIONS_ENABLED_KEY = booleanPreferencesKey("push_notifications_enabled")
     private val SEARCH_RADIUS_KEY = intPreferencesKey("search_radius")
+    // 회원 탈퇴 후 재로그인 시 온보딩 강제 진행 플래그
+    private val IS_WITHDRAWN_KEY = booleanPreferencesKey("is_withdrawn")
 
     // TODO: 백엔드 명세 확인 후 키 이름 변경 가능
     private val ACCESS_TOKEN_KEY  = stringPreferencesKey("access_token")
@@ -39,6 +41,14 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setOnboardingCompleted(completed: Boolean) {
         context.dataStore.edit { it[ONBOARDING_COMPLETED_KEY] = completed }
+    }
+
+    /** 회원 탈퇴 여부 플래그 (탈퇴 후 재로그인 시 온보딩 강제 진행에 사용) */
+    fun getIsWithdrawn(): Flow<Boolean> = context.dataStore.data
+        .map { it[IS_WITHDRAWN_KEY] ?: false }
+
+    suspend fun setIsWithdrawn(value: Boolean) {
+        context.dataStore.edit { it[IS_WITHDRAWN_KEY] = value }
     }
 
     /** 로컬 푸시 알림 설정 여부 (기본값 true) */

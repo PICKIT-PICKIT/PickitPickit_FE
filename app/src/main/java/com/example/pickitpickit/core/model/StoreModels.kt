@@ -83,3 +83,8 @@ data class StoreDetailResponse(
     val tags: List<TagDto>,
     val products: List<ProductDto>
 )
+
+data class StoreTagsUpdateRequest(
+    val tags: List<String>
+)
+

@@ -33,9 +33,12 @@ import kotlinx.coroutines.launch
 import com.example.pickitpickit.core.datastore.UserPreferences
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
 import androidx.compose.runtime.rememberCoroutineScope
 import com.example.pickitpickit.ui.login.LoginScreen
 import com.example.pickitpickit.ui.onboarding.OnboardingScreen
+import com.example.pickitpickit.ui.admin.StoreAdminScreen
 import com.kakao.sdk.user.UserApiClient
 
 class MainActivity : ComponentActivity() {
@@ -122,7 +125,35 @@ fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: 
                             popUpTo("Onboarding") { inclusive = true }
                         }
                     }
+                },
+                onAdminStoreSelected = { storeId, storeName ->
+                    // 관리자 매장 선택 완료 → 매장 관리 화면으로 직접 이동
+                    val encodedName = java.net.URLEncoder.encode(storeName, "UTF-8")
+                    rootNavController.navigate("store_admin/$storeId?storeName=$encodedName") {
+                        popUpTo("Onboarding") { inclusive = true }
+                    }
                 }
+            )
+        }
+        // 관리자 매장 관리 (Root 레뺌에서 직접 진입)
+        composable(
+            route = "store_admin/{storeId}?storeName={storeName}",
+            arguments = listOf(
+                navArgument("storeId") { type = NavType.IntType },
+                navArgument("storeName") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val storeId = backStackEntry.arguments?.getInt("storeId") ?: return@composable
+            val storeName = backStackEntry.arguments?.getString("storeName") ?: ""
+            val decodedName = java.net.URLDecoder.decode(storeName, "UTF-8")
+            StoreAdminScreen(
+                storeId = storeId,
+                storeName = decodedName,
+                onBackClick = { rootNavController.popBackStack() }
             )
         }
         composable("Main") {

@@ -35,6 +35,7 @@ import com.example.pickitpickit.ui.store.StoreDetailScreen
 import com.example.pickitpickit.ui.store.StoreDetailUiState
 import com.example.pickitpickit.ui.store.StoreDetailViewModel
 import com.example.pickitpickit.ui.store.ReviewScreen
+import com.example.pickitpickit.ui.admin.StoreAdminScreen
 
 @Composable
 fun MainNavGraph(
@@ -202,6 +203,26 @@ fun MainNavGraph(
             val storeName = backStackEntry.arguments?.getString("storeName") ?: "매장"
 
             ReviewScreen(
+                storeId = storeId,
+                storeName = storeName,
+                onBackClick = { navController.popBackStack() }
+            )
+        }
+        // 업도 : 매장 관리 (StoreAdminScreen)
+        composable(
+            route = "store_admin/{storeId}?storeName={storeName}",
+            arguments = listOf(
+                navArgument("storeId") { type = NavType.IntType },
+                navArgument("storeName") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = ""
+                }
+            )
+        ) { backStackEntry ->
+            val storeId = backStackEntry.arguments?.getInt("storeId") ?: return@composable
+            val storeName = backStackEntry.arguments?.getString("storeName") ?: ""
+            StoreAdminScreen(
                 storeId = storeId,
                 storeName = storeName,
                 onBackClick = { navController.popBackStack() }

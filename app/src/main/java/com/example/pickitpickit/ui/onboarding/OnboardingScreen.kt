@@ -9,6 +9,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -16,6 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -40,33 +44,42 @@ import com.example.pickitpickit.ui.theme.PickitPickitTheme
 import coil.compose.AsyncImage
 import com.example.pickitpickit.core.model.DefaultProfileImageResponse
 import com.example.pickitpickit.core.model.InterestTagResponse
+import com.example.pickitpickit.ui.home.StoreItem
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(
     onComplete: () -> Unit,
-    onLogout: () -> Unit, // 🌟 유령 토큰 자동 로그아웃 정화 통로!
+    onLogout: () -> Unit,
+    onAdminStoreSelected: (storeId: Int, storeName: String) -> Unit = { _, _ -> },
     viewModel: OnboardingViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val pagerState = rememberPagerState(pageCount = { 3 })
+    // 0: 유형선택, 1: 닉네임, 2: 프로필, 3: 태그 (일반 사용자)
+    // 관리자는 0단계에서 매장 선택 후 완료
+    val pagerState = rememberPagerState(pageCount = { 4 })
     val coroutineScope = rememberCoroutineScope()
 
-    // 서버에 저장되어 있던 온보딩 완료 진척도 페이지 복원
-    LaunchedEffect(uiState.initialPage) {
-        if (uiState.initialPage > 0) {
-            pagerState.scrollToPage(uiState.initialPage)
-        }
-    }
+    // 항상 page 0(유형선택)에서 시작 - 복원 로직 없음
+    // 진척도 복원은 UserTypeStep에서 일반유저 선택 후 처리
 
-    // [🌟 초강력 수동 복원 동기화 장치]
-    // 만약 이미 서버에 온보딩 정보가 완수된 사용자임이 식별되어 isCompleted가 true로 바뀌면, 
-    // 로컬 Preferences 상태와 무관하게 즉각적으로 메인으로 넘겨 진입을 정상화합니다!
+    // 온보딩 완료 → 메인 화면
     LaunchedEffect(uiState.isCompleted) {
         if (uiState.isCompleted) {
             onComplete()
         }
     }
+
+    // 관리자 매장 선택 완료 → 매장 관리 화면
+    LaunchedEffect(uiState.isAdminComplete) {
+        if (uiState.isAdminComplete) {
+            val store = uiState.selectedAdminStore
+            if (store != null) {
+                onAdminStoreSelected(store.id, store.name)
+            }
+        }
+    }
+
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
@@ -106,9 +119,13 @@ fun OnboardingScreen(
                 )
                 
                 Spacer(modifier = Modifier.height(24.dp))
-                StepIndicator(currentStep = pagerState.currentPage)
-                
-                Spacer(modifier = Modifier.height(30.dp))
+                // 관리자 모드일 때는 StepIndicator 숨김
+                if (uiState.userType != UserType.ADMIN) {
+                    StepIndicator(currentStep = if (pagerState.currentPage == 0) -1 else pagerState.currentPage - 1)
+                    Spacer(modifier = Modifier.height(30.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(30.dp))
+                }
                 
                 Card(
                     modifier = Modifier
@@ -124,38 +141,59 @@ fun OnboardingScreen(
                         modifier = Modifier.fillMaxSize()
                     ) { page ->
                         when (page) {
-                          0 -> NicknameStep(
+                          0 -> UserTypeStep(
+                              selectedType = uiState.userType,
+                              onTypeSelect = viewModel::selectUserType,
+                              searchQuery = uiState.storeSearchQuery,
+                              onQueryChange = viewModel::updateStoreSearchQuery,
+                              searchResults = uiState.storeSearchResults,
+                              isSearching = uiState.isStoreSearching,
+                              selectedStore = uiState.selectedAdminStore,
+                              onStoreSelect = viewModel::selectAdminStore,
+                              onNext = {
+                                  if (uiState.userType == UserType.ADMIN) {
+                                      viewModel.completeAdminFlow()
+                                  } else {
+                                      // 일반 유저: 서버 진첫도에 따라 적절한 단계로 이동
+                                      coroutineScope.launch {
+                                          val resumePage = uiState.initialPage + 1 // +1: 유형선택 오프셋
+                                          pagerState.animateScrollToPage(resumePage)
+                                      }
+                                  }
+                              }
+                          )
+                          1 -> NicknameStep(
                               nickname = uiState.nickname,
                               onNicknameChange = viewModel::updateNickname,
                               onRandomNickname = viewModel::generateRandomNickname,
                               onNext = {
                                   viewModel.saveNickname {
                                       coroutineScope.launch {
-                                          pagerState.animateScrollToPage(1)
-                                      }
-                                  }
-                              }
-                          )
-                          1 -> ProfileImageStep(
-                              nickname = uiState.nickname,
-                              selectedUrl = uiState.selectedProfileUrl,
-                              kakaoProfileUrl = uiState.kakaoProfileUrl,
-                              defaultImages = uiState.defaultProfileImages,
-                              onSelectImage = viewModel::selectProfileImage,
-                              onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(0) } },
-                              onNext = {
-                                  viewModel.saveProfileImage {
-                                      coroutineScope.launch {
                                           pagerState.animateScrollToPage(2)
                                       }
                                   }
                               }
                           )
-                          2 -> InterestTagStep(
+                          2 -> ProfileImageStep(
+                              nickname = uiState.nickname,
+                              selectedUrl = uiState.selectedProfileUrl,
+                              kakaoProfileUrl = uiState.kakaoProfileUrl,
+                              defaultImages = uiState.defaultProfileImages,
+                              onSelectImage = viewModel::selectProfileImage,
+                              onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
+                              onNext = {
+                                  viewModel.saveProfileImage {
+                                      coroutineScope.launch {
+                                          pagerState.animateScrollToPage(3)
+                                      }
+                                  }
+                              }
+                          )
+                          3 -> InterestTagStep(
                               selectedTagIds = uiState.selectedTagIds,
                               availableTags = uiState.availableTags,
                               onToggleTag = viewModel::toggleTag,
-                              onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(1) } },
+                              onPrev = { coroutineScope.launch { pagerState.animateScrollToPage(2) } },
                               onComplete = {
                                   viewModel.saveInterestTagsAndComplete(onComplete)
                               }
@@ -934,6 +972,609 @@ fun InterestTagStep(
         }
         
         Spacer(modifier = Modifier.height(24.dp)) // 🌟 롱 스크롤을 시원하게 보장해 주는 하단 여백 추가!
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// 0단계: 사용자 유형 선택 (일반 사용자 / 매장 관리자)
+// ─────────────────────────────────────────────────────────────
+
+@Composable
+fun UserTypeStep(
+    selectedType: UserType,
+    onTypeSelect: (UserType) -> Unit,
+    searchQuery: String,
+    onQueryChange: (String) -> Unit,
+    searchResults: List<StoreItem>,
+    isSearching: Boolean,
+    selectedStore: StoreItem?,
+    onStoreSelect: (StoreItem) -> Unit,
+    onNext: () -> Unit
+) {
+    var showNewStoreForm by remember { mutableStateOf(false) }
+    var newStoreName by remember { mutableStateOf("") }
+    var newStoreAddress by remember { mutableStateOf("") }
+
+    val scrollState = rememberScrollState()
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState)
+            .padding(horizontal = 24.dp, vertical = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // ── 헤더 아이콘 ──────────────────────────────────────
+        Box(
+            modifier = Modifier
+                .size(54.dp)
+                .clip(CircleShape)
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(Color(0xFF6B4EFF), Color(0xFF9DD2FB))
+                    )
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Person,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(28.dp)
+            )
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        Text(
+            "사용자 유형 선택",
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = Color(0xFF1E293B)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            "어떤 용도로 사용하시나요?",
+            color = Color.Gray,
+            fontSize = 13.sp
+        )
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // ── 일반 사용자 카드 ────────────────────────────────
+        val isRegularSelected = selectedType == UserType.REGULAR
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    color = if (isRegularSelected) Color(0xFFF3F0FF) else Color(0xFFF8FAFC),
+                    shape = RoundedCornerShape(14.dp)
+                )
+                .border(
+                    width = if (isRegularSelected) 2.dp else 1.dp,
+                    color = if (isRegularSelected) Color(0xFF6B4EFF) else Color(0xFFE2E8F0),
+                    shape = RoundedCornerShape(14.dp)
+                )
+                .clickable { onTypeSelect(UserType.REGULAR) }
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isRegularSelected)
+                                Brush.linearGradient(listOf(Color(0xFF6B4EFF), Color(0xFF9810FA)))
+                            else
+                                Brush.linearGradient(listOf(Color(0xFFCBD5E1), Color(0xFFCBD5E1)))
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_user),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "일반 사용자",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = if (isRegularSelected) Color(0xFF4F39F6) else Color(0xFF1E293B)
+                    )
+                    Text(
+                        "인형뽑기/가차샵을 찾고 리뷰를\n남기고 싶어요.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF64748B),
+                        lineHeight = 17.sp
+                    )
+                }
+                if (isRegularSelected) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // ── 매장 관리자 카드 ────────────────────────────────
+        val isAdminSelected = selectedType == UserType.ADMIN
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(14.dp))
+                .background(
+                    color = if (isAdminSelected) Color(0xFFFFF7ED) else Color(0xFFF8FAFC),
+                    shape = RoundedCornerShape(14.dp)
+                )
+                .border(
+                    width = if (isAdminSelected) 2.dp else 1.dp,
+                    color = if (isAdminSelected) Color(0xFFF97316) else Color(0xFFE2E8F0),
+                    shape = RoundedCornerShape(14.dp)
+                )
+                .clickable { onTypeSelect(UserType.ADMIN) }
+                .padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(
+                            if (isAdminSelected)
+                                Brush.linearGradient(listOf(Color(0xFFF97316), Color(0xFFEF4444)))
+                            else
+                                Brush.linearGradient(listOf(Color(0xFFCBD5E1), Color(0xFFCBD5E1)))
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_store),
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "매장 관리자",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp,
+                        color = if (isAdminSelected) Color(0xFFF97316) else Color(0xFF1E293B)
+                    )
+                    Text(
+                        "내 매장의 재고와 정보를 관리\n하고 싶어요.",
+                        fontSize = 12.sp,
+                        color = Color(0xFF64748B),
+                        lineHeight = 17.sp
+                    )
+                }
+                if (isAdminSelected) {
+                    Box(
+                        modifier = Modifier
+                            .size(22.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFF10B981)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp)
+                        )
+                    }
+                }
+            }
+        }
+
+        // ── 관리자 선택 시 매장 검색 섹션 ──────────────────
+        if (isAdminSelected) {
+            Spacer(modifier = Modifier.height(18.dp))
+
+            Text(
+                "관리할 매장 검색",
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp,
+                color = Color(0xFF1E293B),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            // 검색 필드
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onQueryChange,
+                placeholder = {
+                    Text(
+                        "매장 이름 또는 주소로 검색...",
+                        fontSize = 13.sp,
+                        color = Color(0xFF94A3B8)
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Search,
+                        contentDescription = null,
+                        tint = Color(0xFF6B4EFF),
+                        modifier = Modifier.size(20.dp)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = Color(0xFFF97316),
+                    unfocusedBorderColor = Color(0xFFE2E8F0),
+                    focusedContainerColor = Color.White,
+                    unfocusedContainerColor = Color.White
+                ),
+                singleLine = true
+            )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            if (isSearching) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(
+                        color = Color(0xFFF97316),
+                        modifier = Modifier.size(28.dp),
+                        strokeWidth = 2.5.dp
+                    )
+                }
+            } else if (searchQuery.isNotBlank() && searchResults.isEmpty()) {
+                // 검색 결과 없음
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(60.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("검색 결과가 없습니다.", color = Color.Gray, fontSize = 13.sp)
+                }
+            } else {
+                // 검색 결과 목록
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, Color(0xFFE2E8F0), RoundedCornerShape(12.dp))
+                ) {
+                    searchResults.forEach { store ->
+                        val isSelected = selectedStore?.id == store.id
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    if (isSelected) Color(0xFFFFF7ED) else Color.White
+                                )
+                                .clickable { onStoreSelect(store) }
+                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSelected)
+                                            Brush.linearGradient(listOf(Color(0xFFF97316), Color(0xFFEF4444)))
+                                        else
+                                            Brush.linearGradient(listOf(Color(0xFFE2E8F0), Color(0xFFE2E8F0)))
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.ic_store),
+                                    contentDescription = null,
+                                    tint = if (isSelected) Color.White else Color(0xFF94A3B8),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    store.name,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 13.sp,
+                                    color = if (isSelected) Color(0xFFF97316) else Color(0xFF1E293B)
+                                )
+                                Text(
+                                    "@ ${store.address}",
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF94A3B8)
+                                )
+                            }
+                            if (isSelected) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = Color(0xFF10B981),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                        if (store != searchResults.last()) {
+                            Divider(color = Color(0xFFE2E8F0), thickness = 0.5.dp)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // ── 새 매장 등록 버튼 / 폼 ─────────────────────
+            if (!showNewStoreForm) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(Color(0xFFF0FFF4), Color(0xFFE8FFF0))
+                            )
+                        )
+                        .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(12.dp))
+                        .clickable { showNewStoreForm = true }
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFF10B981)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Add,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "매장이 없나요?",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = Color(0xFF059669)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            "새 매장을 등록하세요",
+                            fontSize = 13.sp,
+                            color = Color(0xFF064E3B)
+                        )
+                    }
+                }
+            } else {
+                // ── 새 매장 등록 폼 (UI only) ───────────────
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(14.dp))
+                        .background(Color(0xFFF0FFF4))
+                        .border(1.dp, Color(0xFF86EFAC), RoundedCornerShape(14.dp))
+                        .padding(16.dp)
+                ) {
+                    // 아이콘 + 제목
+                    Row(
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(Color(0xFF10B981), Color(0xFF059669))
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                painter = painterResource(id = R.drawable.ic_store),
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        "새 매장 등록",
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 16.sp,
+                        color = Color(0xFF064E3B),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                    Text(
+                        "매장 정보를 입력해주세요",
+                        fontSize = 12.sp,
+                        color = Color(0xFF6EE7B7),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Text(
+                        "매장 이름 *",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF064E3B)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = newStoreName,
+                        onValueChange = { newStoreName = it },
+                        placeholder = { Text("예: 홍대 캐치랑", fontSize = 12.sp, color = Color(0xFF94A3B8)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF10B981),
+                            unfocusedBorderColor = Color(0xFF86EFAC),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        singleLine = true
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        "매장 주소 *",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFF064E3B)
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    OutlinedTextField(
+                        value = newStoreAddress,
+                        onValueChange = { newStoreAddress = it },
+                        placeholder = {
+                            Text(
+                                "예: 서울시 마포구 홍대입구역 9번출구",
+                                fontSize = 12.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color(0xFF10B981),
+                            unfocusedBorderColor = Color(0xFF86EFAC),
+                            focusedContainerColor = Color.White,
+                            unfocusedContainerColor = Color.White
+                        ),
+                        minLines = 2,
+                        maxLines = 3
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // 안내 문구
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Color(0xFFD1FAE5))
+                            .padding(10.dp)
+                    ) {
+                        Text(
+                            "• 안내: 등록 후 관리자 인증이 필요하며,\n승인까지 1~2일 소요될 수 있습니다.",
+                            fontSize = 11.sp,
+                            color = Color(0xFF065F46),
+                            lineHeight = 16.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedButton(
+                            onClick = {
+                                showNewStoreForm = false
+                                newStoreName = ""
+                                newStoreAddress = ""
+                            },
+                            modifier = Modifier.weight(1f).height(44.dp),
+                            shape = RoundedCornerShape(22.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF86EFAC))
+                        ) {
+                            Text("취소", color = Color(0xFF059669), fontWeight = FontWeight.Bold)
+                        }
+                        Button(
+                            onClick = { /* UI only */ },
+                            modifier = Modifier.weight(2f).height(44.dp),
+                            shape = RoundedCornerShape(22.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("등록하기", fontWeight = FontWeight.Bold, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(20.dp))
+
+        // ── 다음 단계 버튼 ────────────────────────────────
+        val isNextEnabled = if (isAdminSelected) {
+            selectedStore != null
+        } else {
+            true // 일반 사용자는 항상 활성화
+        }
+
+        val nextBtnGradient = Brush.linearGradient(
+            colors = if (isNextEnabled)
+                listOf(Color(0xFF4F39F6), Color(0xFF9810FA))
+            else
+                listOf(Color(0xFFE0E0E0), Color(0xFFE0E0E0))
+        )
+
+        Button(
+            onClick = onNext,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(50.dp)
+                .background(brush = nextBtnGradient, shape = RoundedCornerShape(25.dp)),
+            shape = RoundedCornerShape(25.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent
+            ),
+            enabled = isNextEnabled,
+            contentPadding = PaddingValues(0.dp)
+        ) {
+            Text(
+                text = if (isAdminSelected) "매장 관리 시작 →" else "다음 단계 →",
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isNextEnabled) Color.White else Color.Gray
+            )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 

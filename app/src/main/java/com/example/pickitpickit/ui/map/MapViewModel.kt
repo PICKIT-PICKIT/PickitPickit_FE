@@ -202,6 +202,7 @@ class MapViewModel : ViewModel() {
     // 카테고리 + 검색어 + 검색반경(거리단위)을 함께 적용한 필터링 결과
     fun getFilteredStores(): List<StoreItem> {
         val query = _searchQuery.value.trim()
+        val cleanQuery = query.removePrefix("#")
         val category = _selectedCategory.value
         val radius = _searchRadius.value
 
@@ -210,7 +211,7 @@ class MapViewModel : ViewModel() {
             val matchQuery = query.isEmpty() ||
                     store.name.contains(query, ignoreCase = true) ||
                     store.address.contains(query, ignoreCase = true) ||
-                    store.tags.any { it.contains(query, ignoreCase = true) }
+                    store.tags.any { it.contains(cleanQuery, ignoreCase = true) }
             
             // 키워드 검색 시 백엔드 API가 반경 설정을 무시하고 전역 매칭 결과를 반환하므로,
             // 로컬 필터링 단에서 설정 반경(radius) 이내인 매장만 노출되도록 필터링을 추가 보완합니다.

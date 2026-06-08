@@ -6,11 +6,23 @@ import androidx.lifecycle.viewModelScope
 import com.example.pickitpickit.core.model.DefaultProfileImageResponse
 import com.example.pickitpickit.core.model.InterestTagResponse
 import com.example.pickitpickit.core.network.OnboardingRepository
+import com.example.pickitpickit.core.network.StoreRepository
+import com.example.pickitpickit.ui.home.StoreItem
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+
+/**
+ * 사용자 유형 (일반 사용자 / 매장 관리자)
+ */
+enum class UserType {
+    REGULAR,
+    ADMIN
+}
 
 /**
  * 온보딩 화면의 전반적인 상태를 정의하는 데이터 클래스
@@ -32,16 +44,29 @@ data class OnboardingState(
     val errorMessage: String? = null,
     val isCompleted: Boolean = false,
     
-    // 복원할 초기 페이지 (0: 닉네임, 1: 프로필 이미지, 2: 관심 태그)
-    val initialPage: Int = 0
+    // 복원할 초기 페이지 (0: 유형선택, 1: 닉네임, 2: 프로필 이미지, 3: 관심 태그)
+    val initialPage: Int = 0,
+
+    // 사용자 유형 선택 상태
+    val userType: UserType = UserType.REGULAR,
+
+    // 매장 관리자 - 매장 검색 상태
+    val storeSearchQuery: String = "",
+    val storeSearchResults: List<StoreItem> = emptyList(),
+    val isStoreSearching: Boolean = false,
+    val selectedAdminStore: StoreItem? = null,
+    val isAdminComplete: Boolean = false // 관리자가 매장 선택 완료 시
 )
 
 class OnboardingViewModel : ViewModel() {
 
     private val repository = OnboardingRepository()
+    private val storeRepository = StoreRepository()
 
     private val _uiState = MutableStateFlow(OnboardingState())
     val uiState: StateFlow<OnboardingState> = _uiState.asStateFlow()
+
+    private var storeSearchJob: Job? = null
 
     private val adjectives = listOf(
         "졸린", "억울한", "삐진", "당당한", "신난", "야망 있는", "소심한", "뻔뻔한", "아련한", "친절한",
@@ -357,5 +382,61 @@ class OnboardingViewModel : ViewModel() {
      */
     fun clearError() {
         _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 사용자 유형 선택
+    // ──────────────────────────────────────────────────────────────
+
+    /**
+     * 사용자 유형 선택 (일반 / 관리자)
+     */
+    fun selectUserType(type: UserType) {
+        _uiState.update {
+            it.copy(
+                userType = type,
+                // 유형 변경 시 매장 검색 초기화
+                storeSearchQuery = "",
+                storeSearchResults = emptyList(),
+                selectedAdminStore = null,
+                isAdminComplete = false
+            )
+        }
+    }
+
+    /**
+     * 매장 검색어 변경 — 300ms debounce 후 API 호출
+     */
+    fun updateStoreSearchQuery(query: String) {
+        _uiState.update { it.copy(storeSearchQuery = query, selectedAdminStore = null) }
+
+        storeSearchJob?.cancel()
+        if (query.isBlank()) {
+            _uiState.update { it.copy(storeSearchResults = emptyList(), isStoreSearching = false) }
+            return
+        }
+
+        storeSearchJob = viewModelScope.launch {
+            delay(300)
+            _uiState.update { it.copy(isStoreSearching = true) }
+            Log.i("ONBOARDING_FLOW", "매장 검색 요청: '$query'")
+            val results = storeRepository.searchStores(keyword = query, limit = 20)
+            Log.i("ONBOARDING_FLOW", "매장 검색 결과: ${results.size}건")
+            _uiState.update { it.copy(storeSearchResults = results, isStoreSearching = false) }
+        }
+    }
+
+    /**
+     * 관리자가 관리할 매장 선택
+     */
+    fun selectAdminStore(store: StoreItem) {
+        _uiState.update { it.copy(selectedAdminStore = store) }
+    }
+
+    /**
+     * 관리자 플로우 완료 (매장 선택 후 관리 페이지로)
+     */
+    fun completeAdminFlow() {
+        _uiState.update { it.copy(isAdminComplete = true) }
     }
 }

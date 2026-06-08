@@ -115,7 +115,9 @@ fun MyPageScreen(
             }
         },
         onMyReviewsClick = onMyReviewsClick,
-        onMyBragsClick = onMyBragsClick
+        onMyBragsClick = onMyBragsClick,
+        onSetPushNotificationsEnabled = myPageViewModel::setPushNotificationsEnabled,
+        onSetSearchRadius = myPageViewModel::setSearchRadius
     )
 }
 
@@ -126,26 +128,22 @@ internal fun MyPageScreenContent(
     onEditClick: () -> Unit,
     onDeleteAccountClick: () -> Unit,
     onMyReviewsClick: () -> Unit,
-    onMyBragsClick: () -> Unit
+    onMyBragsClick: () -> Unit,
+    onSetPushNotificationsEnabled: (Boolean) -> Unit,
+    onSetSearchRadius: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
-    val userPreferences = com.example.pickitpickit.GlobalApplication.userPreferences
 
     // 현재 알림 허용 여부 상태 (코루튼 재시작 시 자동 갱신)
     var notificationsEnabled by remember {
         mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled())
     }
 
-    // 로컬 푸시 알림 설정 값 (기본값 true)
-    val localPushEnabled by userPreferences.isPushNotificationsEnabled.collectAsState(initial = true)
-
-    // 로컬 검색 반경 설정 값 (기본값 1000m = 1km)
-    val searchRadius by userPreferences.searchRadius.collectAsState(initial = 1000)
     var showRadiusDialog by remember { mutableStateOf(false) }
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     // 최종 사용자 알림 활성화 여부
-    val isNotificationsOn = notificationsEnabled && localPushEnabled
+    val isNotificationsOn = notificationsEnabled && uiState.localPushEnabled
 
     // Android 13+ 시스템 알림 권한 요청 launcher
     val notificationPermissionLauncher = rememberLauncherForActivityResult(
@@ -153,9 +151,7 @@ internal fun MyPageScreenContent(
     ) { granted ->
         notificationsEnabled = granted
         if (granted) {
-            coroutineScope.launch {
-                userPreferences.setPushNotificationsEnabled(true)
-            }
+            onSetPushNotificationsEnabled(true)
         }
     }
 
@@ -340,12 +336,12 @@ internal fun MyPageScreenContent(
 
                 SectionLabel(text = "위치 설정")
                 SettingsCard {
-                    val radiusSubtitle = when (searchRadius) {
+                    val radiusSubtitle = when (uiState.searchRadius) {
                         500 -> "500미터 (500m)"
                         1000 -> "1 킬로미터 (1km)"
                         3000 -> "3 킬로미터 (3km)"
                         5000 -> "5 킬로미터 (5km)"
-                        else -> "${searchRadius / 1000.0} 킬로미터"
+                        else -> "${uiState.searchRadius / 1000.0} 킬로미터"
                     }
                     SettingsItem(
                         iconRes = R.drawable.ic_distance,
@@ -386,9 +382,7 @@ internal fun MyPageScreenContent(
                                 }
                             } else {
                                 // 2. 시스템 권한이 활성화 상태이면, 로컬 푸시 알림 허용 여부를 반대로 토글!
-                                coroutineScope.launch {
-                                    userPreferences.setPushNotificationsEnabled(!localPushEnabled)
-                                }
+                                onSetPushNotificationsEnabled(!uiState.localPushEnabled)
                             }
                         }
                     )
@@ -580,21 +574,17 @@ internal fun MyPageScreenContent(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
-                                        coroutineScope.launch {
-                                            userPreferences.setSearchRadius(value)
-                                            showRadiusDialog = false
-                                        }
+                                        onSetSearchRadius(value)
+                                        showRadiusDialog = false
                                     }
                                     .padding(vertical = 12.dp, horizontal = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 RadioButton(
-                                    selected = (searchRadius == value),
+                                    selected = (uiState.searchRadius == value),
                                     onClick = {
-                                        coroutineScope.launch {
-                                            userPreferences.setSearchRadius(value)
-                                            showRadiusDialog = false
-                                        }
+                                        onSetSearchRadius(value)
+                                        showRadiusDialog = false
                                     },
                                     colors = RadioButtonDefaults.colors(selectedColor = Color(0xFF5393FA))
                                 )
@@ -603,7 +593,7 @@ internal fun MyPageScreenContent(
                                     text = label,
                                     fontSize = 15.sp,
                                     color = Color(0xFF1A1A2E),
-                                    fontWeight = if (searchRadius == value) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (uiState.searchRadius == value) FontWeight.Bold else FontWeight.Normal
                                 )
                             }
                         }
@@ -808,7 +798,9 @@ fun MyPageScreenPreview() {
             onEditClick = {},
             onDeleteAccountClick = {},
             onMyReviewsClick = {},
-            onMyBragsClick = {}
+            onMyBragsClick = {},
+            onSetPushNotificationsEnabled = {},
+            onSetSearchRadius = {}
         )
     }
 }
@@ -823,7 +815,9 @@ fun MyPageScreenLoadingPreview() {
             onEditClick = {},
             onDeleteAccountClick = {},
             onMyReviewsClick = {},
-            onMyBragsClick = {}
+            onMyBragsClick = {},
+            onSetPushNotificationsEnabled = {},
+            onSetSearchRadius = {}
         )
     }
 }

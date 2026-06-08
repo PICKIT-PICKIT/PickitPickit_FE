@@ -9,6 +9,7 @@ import com.example.pickitpickit.core.model.KakaoLoginRequest
 import com.example.pickitpickit.core.network.RetrofitClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 // ──────────────────────────────────────────────────────────────
@@ -60,9 +61,21 @@ class LoginViewModel(
                     // 서버 온보딩 상태를 로컬 DataStore에 동기화
                     userPreferences.setOnboardingCompleted(data.user.onboardingCompleted)
 
+                    // 회원 탈퇴 후 재로그인 시 온보딩 강제 진행 체크
+                    val isWithdrawn = userPreferences.getIsWithdrawn().first()
+                    val effectiveOnboarding = if (isWithdrawn) {
+                        // 탈퇴 후 재가입: 서버 값과 무관하게 온보딩 재진행
+                        userPreferences.setOnboardingCompleted(false)
+                        userPreferences.setIsWithdrawn(false) // 플래그 삭제
+                        Log.i("LOGIN", "탈퇴 후 재로그인 새 온보딩 강제 시작")
+                        false
+                    } else {
+                        data.user.onboardingCompleted
+                    }
+
                     Log.i("LOGIN", "서버 로그인 성공 | userId=${data.user.id}, nickname=${data.user.nickname}")
                     // 서버가 알려주는 온보딩 완료 여부를 그대로 전달
-                    _loginState.value = LoginState.Success(data.user.onboardingCompleted)
+                    _loginState.value = LoginState.Success(effectiveOnboarding)
 
                 } else {
                     val errorMsg = response.body()?.message ?: "로그인에 실패했습니다."

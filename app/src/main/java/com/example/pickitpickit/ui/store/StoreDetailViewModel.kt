@@ -14,6 +14,8 @@ import com.example.pickitpickit.core.model.BragPatchRequest
 import com.example.pickitpickit.core.network.ReviewRepository
 import com.example.pickitpickit.core.network.StoreRepository
 import com.example.pickitpickit.core.network.BragRepository
+import com.example.pickitpickit.core.network.OwnerRepository
+import com.example.pickitpickit.core.network.api.ItemDto
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -51,6 +53,7 @@ class StoreDetailViewModel(
     private val repository = StoreRepository()
     private val reviewRepository = ReviewRepository()
     private val bragRepository = BragRepository()
+    private val ownerRepository = OwnerRepository()
 
     private val _uiState = MutableStateFlow<StoreDetailUiState>(StoreDetailUiState.Loading)
     val uiState: StateFlow<StoreDetailUiState> = _uiState.asStateFlow()
@@ -70,6 +73,19 @@ class StoreDetailViewModel(
     // 자랑하기 작성 중 상태
     private val _isBragSubmitting = MutableStateFlow(false)
     val isBragSubmitting: StateFlow<Boolean> = _isBragSubmitting.asStateFlow()
+
+    // 매장 상품 관리 작업 상태
+    private val _ownerActionResult = MutableSharedFlow<String?>()
+    val ownerActionResult: SharedFlow<String?> = _ownerActionResult.asSharedFlow()
+
+    private val _isOwnerActionSubmitting = MutableStateFlow(false)
+    val isOwnerActionSubmitting: StateFlow<Boolean> = _isOwnerActionSubmitting.asStateFlow()
+
+    private val _itemSearchResults = MutableStateFlow<List<ItemDto>>(emptyList())
+    val itemSearchResults: StateFlow<List<ItemDto>> = _itemSearchResults.asStateFlow()
+
+    private val _isItemSearching = MutableStateFlow(false)
+    val isItemSearching: StateFlow<Boolean> = _isItemSearching.asStateFlow()
 
     // 내 리뷰 식별을 위한 사용자 고유 ID 흐름
     private val _currentUserId = MutableStateFlow<Long?>(null)
@@ -325,6 +341,134 @@ class StoreDetailViewModel(
             _isBragSubmitting.update { false }
         }
     }
+
+    private var itemSearchJob: kotlinx.coroutines.Job? = null
+
+    fun searchItems(query: String) {
+        itemSearchJob?.cancel()
+        if (query.isBlank()) {
+            _itemSearchResults.value = emptyList()
+            return
+        }
+        itemSearchJob = viewModelScope.launch {
+            _isItemSearching.value = true
+            val results = ownerRepository.searchItems(query)
+            _itemSearchResults.value = results
+            _isItemSearching.value = false
+        }
+    }
+
+    fun addStoreProduct(
+        itemId: Long,
+        itemName: String,
+        category: String,
+        price: Int,
+        inventoryMode: String,
+        stockQuantity: Int,
+        stockStatus: String,
+        difficulty: Int,
+        imageUrl: String?,
+        tags: List<String>
+    ) {
+        viewModelScope.launch {
+            _isOwnerActionSubmitting.value = true
+            
+            val finalItemId = if (itemId <= 0L) {
+                // 1단계: 상품 마스터 등록
+                val (newId, registerError) = ownerRepository.registerItem(itemName, category, tags)
+                if (newId == null) {
+                    _isOwnerActionSubmitting.value = false
+                    _ownerActionResult.emit(registerError ?: "새 상품 등록 권한이 없거나 서버 오류가 발생했습니다.")
+                    return@launch
+                }
+                newId
+            } else {
+                itemId
+            }
+
+            // 2단계: 내 매장 상품 등록
+            val request = com.example.pickitpickit.core.model.StoreProductRegisterRequest(
+                storeId = storeId.toLong(),
+                itemId = finalItemId,
+                price = price,
+                inventoryMode = inventoryMode,
+                stockQuantity = stockQuantity,
+                stockStatus = stockStatus,
+                difficulty = difficulty,
+                imageUrl = imageUrl ?: "",
+                tags = tags
+            )
+            val errorMsg = ownerRepository.registerProduct(request)
+            _isOwnerActionSubmitting.value = false
+            if (errorMsg == null) {
+                _ownerActionResult.emit("ADD_SUCCESS")
+                loadStoreDetail()
+            } else {
+                _ownerActionResult.emit(errorMsg)
+            }
+        }
+    }
+
+    fun updateStoreProduct(
+        productId: Long,
+        price: Int,
+        inventoryMode: String,
+        stockQuantity: Int,
+        stockStatus: String,
+        difficulty: Int,
+        imageUrl: String?,
+        tags: List<String>
+    ) {
+        viewModelScope.launch {
+            _isOwnerActionSubmitting.value = true
+            val request = com.example.pickitpickit.core.model.StoreProductUpdateRequest(
+                price = price,
+                inventoryMode = inventoryMode,
+                stockQuantity = stockQuantity,
+                stockStatus = stockStatus,
+                difficulty = difficulty,
+                imageUrl = imageUrl ?: "",
+                tags = tags
+            )
+            val errorMsg = ownerRepository.updateProduct(productId, request)
+            _isOwnerActionSubmitting.value = false
+            if (errorMsg == null) {
+                _ownerActionResult.emit("UPDATE_SUCCESS")
+                loadStoreDetail()
+            } else {
+                _ownerActionResult.emit(errorMsg)
+            }
+        }
+    }
+
+    fun deleteStoreProduct(productId: Long) {
+        viewModelScope.launch {
+            _isOwnerActionSubmitting.value = true
+            val errorMsg = ownerRepository.deleteProduct(productId)
+            _isOwnerActionSubmitting.value = false
+            if (errorMsg == null) {
+                _ownerActionResult.emit("DELETE_SUCCESS")
+                loadStoreDetail()
+            } else {
+                _ownerActionResult.emit(errorMsg)
+            }
+        }
+    }
+
+    fun updateStoreTags(tags: List<String>) {
+        viewModelScope.launch {
+            _isOwnerActionSubmitting.value = true
+            val errorMsg = ownerRepository.updateStoreTags(storeId.toLong(), tags)
+            _isOwnerActionSubmitting.value = false
+            if (errorMsg == null) {
+                _ownerActionResult.emit("UPDATE_TAGS_SUCCESS")
+                loadStoreDetail()
+            } else {
+                _ownerActionResult.emit(errorMsg)
+            }
+        }
+    }
+
 
 
     // ──────────────────────────────────────────────────────────────
