@@ -20,6 +20,8 @@ import androidx.compose.material.icons.Icons
 
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -48,6 +50,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.pickitpickit.R
+import com.example.pickitpickit.core.model.FavoriteStoreResponse
 import com.example.pickitpickit.ui.map.MapCategory
 import com.example.pickitpickit.ui.map.MapViewModel
 import coil.compose.AsyncImage
@@ -73,10 +76,16 @@ fun HomeScreen(
     val searchQuery by mapViewModel.searchQuery.collectAsState()
     val recentSearches by mapViewModel.recentSearches.collectAsState()
     val registeredTags by mapViewModel.registeredTags.collectAsState()
+    val favoriteStoreIds by mapViewModel.favoriteStoreIds.collectAsState()
+    val nearbyStores by mapViewModel.nearbyStores.collectAsState()
     val context = LocalContext.current
 
-    // 카테고리 + 검색어 통합 필터링
-    val filteredStores = remember(searchQuery, selectedCategory) {
+    // 매장 마커들을 보관할 리스트
+    val storeLabels = remember { mutableStateListOf<com.kakao.vectormap.label.Label>() }
+    val labelToStoreIdMap = remember { mutableStateMapOf<com.kakao.vectormap.label.Label, Int>() }
+
+    // 카테고리 + 검색어 통합 필터링 (즐겨찾기 변경 및 매장 갱신 시에도 실시간 정렬 반영)
+    val filteredStores = remember(searchQuery, selectedCategory, favoriteStoreIds, nearbyStores) {
         mapViewModel.getFilteredStores()
     }
 
@@ -141,6 +150,7 @@ fun HomeScreen(
     }
 
     LaunchedEffect(Unit) {
+        mapViewModel.loadFavoriteStores()
         locationPermissionLauncher.launch(
             arrayOf(
                 android.Manifest.permission.ACCESS_FINE_LOCATION,
@@ -149,13 +159,18 @@ fun HomeScreen(
         )
     }
 
-    // 지도 준비되면 현재 위치로 이동
+    // 지도 준비되면 현재 위치로 이동 및 마커 클릭 리스너 설정
     LaunchedEffect(kakaoMapInstance) {
-        if (kakaoMapInstance != null) moveToCurrentLocation()
+        val map = kakaoMapInstance ?: return@LaunchedEffect
+        moveToCurrentLocation()
+        map.setOnLabelClickListener { _, _, label ->
+            val storeId = labelToStoreIdMap[label]
+            if (storeId != null) {
+                onStoreClick(storeId)
+            }
+            true
+        }
     }
-
-    // 매장 마커들을 보관할 리스트
-    val storeLabels = remember { mutableStateListOf<com.kakao.vectormap.label.Label>() }
 
     // 매장 목록(filteredStores)이 갱신될 때마다 마커를 지우고 새로 그림
     LaunchedEffect(filteredStores, kakaoMapInstance) {
@@ -165,6 +180,7 @@ fun HomeScreen(
         // 1. 기존 매장 마커 전부 제거
         storeLabels.forEach { label -> layer.remove(label) }
         storeLabels.clear()
+        labelToStoreIdMap.clear()
 
         // 2. 새 매장 마커 추가
         val markerBitmap = getBitmapFromDrawable(context, R.drawable.ic_store_marker)
@@ -176,6 +192,7 @@ fun HomeScreen(
             )
             if (label != null) {
                 storeLabels.add(label)
+                labelToStoreIdMap[label] = store.id
             }
         }
     }
@@ -261,9 +278,11 @@ fun HomeScreen(
                         enter = slideInVertically(initialOffsetY = { -it }) + fadeIn(),
                         exit = slideOutVertically(targetOffsetY = { -it }) + fadeOut()
                     ) {
+                        val favoriteStores by mapViewModel.favoriteStores.collectAsState()
                         SearchDropdownPanel(
                             recentSearches = recentSearches,
                             registeredTags = registeredTags,
+                            favoriteStores = favoriteStores,
                             onSearchSelect = { query ->
                                 mapViewModel.updateSearchQuery(query)
                                 focusManager.clearFocus()
@@ -273,6 +292,10 @@ fun HomeScreen(
                             },
                             onClearAllRecentSearches = {
                                 mapViewModel.clearAllRecentSearches()
+                            },
+                            onStoreClick = { storeId ->
+                                focusManager.clearFocus()
+                                onStoreClick(storeId)
                             }
                         )
                     }
@@ -299,8 +322,7 @@ fun HomeScreen(
         NearbyRecommendButton(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 16.dp),
+                .padding(bottom = 8.dp),
             onClick = { mapViewModel.showBottomSheet() }
         )
     }
@@ -311,10 +333,13 @@ fun HomeScreen(
             onDismissRequest = { mapViewModel.hideBottomSheet() },
             sheetState = sheetState,
             containerColor = Color.White,
-            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+            shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
+            dragHandle = null
         ) {
             NearbyStoreBottomSheet(
                 stores = filteredStores,
+                favoriteStoreIds = favoriteStoreIds,
+                onFavoriteToggle = { mapViewModel.toggleFavoriteStore(it) },
                 onClose = { mapViewModel.hideBottomSheet() },
                 onStoreClick = onStoreClick
             )
@@ -447,9 +472,11 @@ fun SearchBar(
 fun SearchDropdownPanel(
     recentSearches: List<String>,
     registeredTags: List<String>,
+    favoriteStores: List<FavoriteStoreResponse>,
     onSearchSelect: (String) -> Unit,
     onDeleteRecentSearch: (String) -> Unit,
-    onClearAllRecentSearches: () -> Unit
+    onClearAllRecentSearches: () -> Unit,
+    onStoreClick: (Int) -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -524,6 +551,41 @@ fun SearchDropdownPanel(
                 } // forEach 닫기
             } // else 닫기
             
+            Spacer(modifier = Modifier.height(20.dp))
+            HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
+            Spacer(modifier = Modifier.height(20.dp))
+
+            // 내가 저장한 매장 Title
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFF44336), modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("내가 저장한 매장", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color.Black)
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+            // 저장한 매장 리스트
+            if (favoriteStores.isEmpty()) {
+                Text(
+                    text = "저장한 매장이 없습니다.",
+                    fontSize = 14.sp,
+                    color = Color.Gray,
+                    modifier = Modifier.padding(start = 28.dp, top = 8.dp)
+                )
+            } else {
+                favoriteStores.forEach { favoriteStore ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onStoreClick(favoriteStore.store.id.toInt()) }
+                            .padding(vertical = 8.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Favorite, contentDescription = null, tint = Color(0xFFF44336).copy(alpha = 0.6f), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(favoriteStore.store.name, fontSize = 15.sp, color = Color.DarkGray)
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(20.dp))
             HorizontalDivider(color = Color.LightGray.copy(alpha = 0.5f), thickness = 1.dp)
             Spacer(modifier = Modifier.height(20.dp))
@@ -660,7 +722,7 @@ fun NearbyRecommendButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
             .clip(RoundedCornerShape(50.dp))
             .background(Color(0xFF1A1A2E))
             .clickable { onClick() }
-            .padding(horizontal = 32.dp, vertical = 14.dp)
+            .padding(horizontal = 24.dp, vertical = 10.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(
@@ -688,10 +750,16 @@ fun NearbyRecommendButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
 @Composable
 fun NearbyStoreBottomSheet(
     stores: List<StoreItem>,
+    favoriteStoreIds: Set<Long>,
+    onFavoriteToggle: (Long) -> Unit,
     onClose: () -> Unit,
     onStoreClick: (Int) -> Unit = {}
 ) {
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 16.dp)
+    ) {
         // 핸들
         Box(
             modifier = Modifier
@@ -721,6 +789,8 @@ fun NearbyStoreBottomSheet(
             items(stores) { store ->
                 StoreListItem(
                     store = store,
+                    isFavorite = favoriteStoreIds.contains(store.id.toLong()),
+                    onFavoriteToggle = { onFavoriteToggle(store.id.toLong()) },
                     onClick = { onStoreClick(store.id) }
                 )
             }
@@ -735,6 +805,8 @@ fun NearbyStoreBottomSheet(
 @Composable
 fun StoreListItem(
     store: StoreItem,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
     onClick: () -> Unit = {}
 ) {
     val categoryLabel = when (store.category) {
@@ -808,12 +880,28 @@ fun StoreListItem(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
-                    Text(
-                        text = "${store.distanceMeters}m",
-                        fontSize = 13.sp,
-                        color = Color(0xFF3B6EF8),
-                        fontWeight = FontWeight.Bold
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "${store.distanceMeters}m",
+                            fontSize = 13.sp,
+                            color = Color(0xFF3B6EF8),
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(
+                            onClick = onFavoriteToggle,
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                contentDescription = "관심 매장 설정/해제",
+                                tint = if (isFavorite) Color.Red else Color.Gray,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(4.dp))
@@ -911,7 +999,11 @@ fun NearbyRecommendButtonPreview() {
 @Preview(showBackground = true, widthDp = 360)
 @Composable
 fun StoreListItemPreview() {
-    StoreListItem(store = dummyStores.first())
+    StoreListItem(
+        store = dummyStores.first(),
+        isFavorite = false,
+        onFavoriteToggle = {}
+    )
 }
 
 @Preview(showBackground = true, widthDp = 360, heightDp = 600)
@@ -919,6 +1011,8 @@ fun StoreListItemPreview() {
 fun NearbyStoreBottomSheetPreview() {
     NearbyStoreBottomSheet(
         stores = dummyStores,
+        favoriteStoreIds = emptySet(),
+        onFavoriteToggle = {},
         onClose = {}
     )
 }

@@ -8,6 +8,10 @@ import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
+import retrofit2.http.POST
+import retrofit2.http.Path
+import retrofit2.http.Query
+import com.example.pickitpickit.core.model.FavoriteStoreResponse
 
 interface UserApi {
 
@@ -33,4 +37,32 @@ interface UserApi {
      */
     @DELETE("api/users/me")
     suspend fun deleteAccount(): Response<ApiResponse<String>>
+
+    /**
+     * 내 관심매장 목록 조회
+     * GET /api/users/me/favorite-stores
+     */
+    @GET("api/users/me/favorite-stores")
+    suspend fun getFavoriteStores(
+        @Query("lat") lat: Double? = null,
+        @Query("lng") lng: Double? = null
+    ): Response<ApiResponse<List<FavoriteStoreResponse>>>
+
+    /**
+     * 관심매장 추가
+     * POST /api/users/me/favorite-stores/{storeId}
+     */
+    @POST("api/users/me/favorite-stores/{storeId}")
+    suspend fun addFavoriteStore(
+        @Path("storeId") storeId: Long
+    ): Response<ApiResponse<FavoriteStoreResponse>>
+
+    /**
+     * 관심매장 삭제
+     * DELETE /api/users/me/favorite-stores/{storeId}
+     */
+    @DELETE("api/users/me/favorite-stores/{storeId}")
+    suspend fun deleteFavoriteStore(
+        @Path("storeId") storeId: Long
+    ): Response<ApiResponse<String>>
 }

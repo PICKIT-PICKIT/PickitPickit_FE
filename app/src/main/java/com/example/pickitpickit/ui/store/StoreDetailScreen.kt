@@ -22,6 +22,8 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -81,6 +83,8 @@ fun StoreDetailScreen(
     storeDetail: StoreDetailResponse,
     reviewData: StoreReviewListResponse?,
     bragData: List<com.example.pickitpickit.core.model.BragDto>?,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
     onBackClick: () -> Unit,
     onSubmitReview: (Double, Int, String?) -> Unit,
     isReviewSubmitting: Boolean,
@@ -184,6 +188,8 @@ fun StoreDetailScreen(
                 storeName = store.name,
                 address = store.address ?: "주소 정보 없음",
                 imageUrl = store.mainImageUrl,
+                isFavorite = isFavorite,
+                onFavoriteToggle = onFavoriteToggle,
                 onBackClick = onBackClick
             )
         }
@@ -494,6 +500,8 @@ private fun StoreHeroSection(
     storeName: String,
     address: String,
     imageUrl: String?,
+    isFavorite: Boolean,
+    onFavoriteToggle: () -> Unit,
     onBackClick: () -> Unit
 ) {
     Box(
@@ -564,6 +572,25 @@ private fun StoreHeroSection(
             )
             Spacer(modifier = Modifier.width(4.dp))
             Text("뒤로 가기", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+        }
+
+        // 좋아요 하트 버튼
+        Box(
+            modifier = Modifier
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .align(Alignment.TopEnd)
+        ) {
+            val heartIcon = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder
+            val heartColor = if (isFavorite) Color.Red else Color.White
+            Icon(
+                imageVector = heartIcon,
+                contentDescription = "좋아요",
+                tint = heartColor,
+                modifier = Modifier
+                    .size(24.dp)
+                    .clickable { onFavoriteToggle() }
+            )
         }
 
         // 하단 매장명 + 주소
@@ -2828,6 +2855,8 @@ fun StoreDetailScreenPreview() {
             storeDetail = dummyStore,
             reviewData = null,
             bragData = null,
+            isFavorite = false,
+            onFavoriteToggle = {},
             onBackClick = {},
             onSubmitReview = { _, _, _ -> },
             isReviewSubmitting = false,

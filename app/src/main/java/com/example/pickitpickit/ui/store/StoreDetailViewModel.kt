@@ -15,6 +15,7 @@ import com.example.pickitpickit.core.network.ReviewRepository
 import com.example.pickitpickit.core.network.StoreRepository
 import com.example.pickitpickit.core.network.BragRepository
 import com.example.pickitpickit.core.network.OwnerRepository
+import com.example.pickitpickit.core.network.UserRepository
 import com.example.pickitpickit.core.network.api.ItemDto
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,10 +96,21 @@ class StoreDetailViewModel(
     private val _writeGuide = MutableStateFlow<com.example.pickitpickit.core.model.ReviewWriteGuideResponse?>(null)
     val writeGuide: StateFlow<com.example.pickitpickit.core.model.ReviewWriteGuideResponse?> = _writeGuide.asStateFlow()
 
+    private val userRepository = UserRepository()
+
+    // 관심매장 여부 상태
+    private val _isFavorite = MutableStateFlow(false)
+    val isFavorite: StateFlow<Boolean> = _isFavorite.asStateFlow()
+
+    // 관심매장 추가/삭제 요청 중 상태
+    private val _isFavoriteSubmitting = MutableStateFlow(false)
+    val isFavoriteSubmitting: StateFlow<Boolean> = _isFavoriteSubmitting.asStateFlow()
+
     init {
         loadStoreDetail()
         loadCurrentUserId()
         loadWriteGuide()
+        checkIfFavorite()
     }
 
     private fun loadCurrentUserId() {
@@ -111,6 +123,42 @@ class StoreDetailViewModel(
         viewModelScope.launch {
             val guide = reviewRepository.getReviewWriteGuide()
             _writeGuide.update { guide }
+        }
+    }
+
+    fun checkIfFavorite() {
+        viewModelScope.launch {
+            val favorites = userRepository.getFavoriteStores(userLatitude, userLongitude)
+            if (favorites != null) {
+                val isFav = favorites.any { it.store.id == storeId.toLong() }
+                _isFavorite.value = isFav
+            }
+        }
+    }
+
+    fun toggleFavoriteStore() {
+        if (_isFavoriteSubmitting.value) return
+        viewModelScope.launch {
+            _isFavoriteSubmitting.value = true
+            val currentFav = _isFavorite.value
+            if (currentFav) {
+                val errorMsg = userRepository.deleteFavoriteStore(storeId.toLong())
+                if (errorMsg == null) {
+                    _isFavorite.value = false
+                    _submitResult.emit("FAVORITE_REMOVE_SUCCESS")
+                } else {
+                    _submitResult.emit(errorMsg)
+                }
+            } else {
+                val response = userRepository.addFavoriteStore(storeId.toLong())
+                if (response != null) {
+                    _isFavorite.value = true
+                    _submitResult.emit("FAVORITE_ADD_SUCCESS")
+                } else {
+                    _submitResult.emit("관심 매장 추가에 실패했습니다.")
+                }
+            }
+            _isFavoriteSubmitting.value = false
         }
     }
 

@@ -88,3 +88,24 @@ data class StoreTagsUpdateRequest(
     val tags: List<String>
 )
 
+data class FavoriteStoreDto(
+    val id: Long,
+    val sourcePlaceId: String?,
+    val name: String,
+    val type: String,
+    val latitude: Double,
+    val longitude: Double,
+    val distance: Int,
+    val address: String?,
+    val contact: String?,
+    val businessHours: String?,
+    val mainImageUrl: String?,
+    val kakaoDetailUrl: String?
+)
+
+data class FavoriteStoreResponse(
+    val favoriteStoreId: Long,
+    val store: FavoriteStoreDto
+)
+
+
