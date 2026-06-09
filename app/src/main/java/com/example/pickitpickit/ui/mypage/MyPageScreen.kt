@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +56,7 @@ fun MyPageScreen(
     onLogoutClick: () -> Unit,
     onMyReviewsClick: () -> Unit,
     onMyBragsClick: () -> Unit,
+    onMyFavoriteStoresClick: () -> Unit,
     myPageViewModel: MyPageViewModel = viewModel()
 ) {
     val uiState by myPageViewModel.uiState.collectAsState()
@@ -116,6 +118,7 @@ fun MyPageScreen(
         },
         onMyReviewsClick = onMyReviewsClick,
         onMyBragsClick = onMyBragsClick,
+        onMyFavoriteStoresClick = onMyFavoriteStoresClick,
         onSetPushNotificationsEnabled = myPageViewModel::setPushNotificationsEnabled,
         onSetSearchRadius = myPageViewModel::setSearchRadius
     )
@@ -129,6 +132,7 @@ internal fun MyPageScreenContent(
     onDeleteAccountClick: () -> Unit,
     onMyReviewsClick: () -> Unit,
     onMyBragsClick: () -> Unit,
+    onMyFavoriteStoresClick: () -> Unit,
     onSetPushNotificationsEnabled: (Boolean) -> Unit,
     onSetSearchRadius: (Int) -> Unit
 ) {
@@ -328,6 +332,19 @@ internal fun MyPageScreenContent(
                         title = "작성한 자랑하기",
                         subtitle = "내가 작성한 게시물 ${uiState.bragCount}개",
                         onClick = onMyBragsClick
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                SectionLabel(text = "관심 매장")
+                SettingsCard {
+                    SettingsItem(
+                        icon = Icons.Default.Favorite,
+                        iconTint = Color(0xFFEF4444),
+                        title = "내가 저장한 매장",
+                        subtitle = "저장한 관심 매장 목록 조회",
+                        onClick = onMyFavoriteStoresClick
                     )
                 }
 
@@ -799,6 +816,7 @@ fun MyPageScreenPreview() {
             onDeleteAccountClick = {},
             onMyReviewsClick = {},
             onMyBragsClick = {},
+            onMyFavoriteStoresClick = {},
             onSetPushNotificationsEnabled = {},
             onSetSearchRadius = {}
         )
@@ -816,6 +834,7 @@ fun MyPageScreenLoadingPreview() {
             onDeleteAccountClick = {},
             onMyReviewsClick = {},
             onMyBragsClick = {},
+            onMyFavoriteStoresClick = {},
             onSetPushNotificationsEnabled = {},
             onSetSearchRadius = {}
         )

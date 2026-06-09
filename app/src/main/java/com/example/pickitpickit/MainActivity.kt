@@ -215,19 +215,17 @@ fun MainScreen(mapViewModel: MapViewModel, onLogoutClick: () -> Unit) {
                             if (item == BottomNavMenuItem.MyPage) {
                                 navController.navigate(item.route) {
                                     navController.graph.startDestinationRoute?.let { route ->
-                                        popUpTo(route) { saveState = true }
+                                        popUpTo(route)
                                     }
                                     launchSingleTop = true
-                                    restoreState = true
                                 }
                             } else {
                                 if (currentRoute != BottomNavMenuItem.Home.route) {
                                     navController.navigate(BottomNavMenuItem.Home.route) {
                                         navController.graph.startDestinationRoute?.let { route ->
-                                            popUpTo(route) { saveState = true }
+                                            popUpTo(route)
                                         }
                                         launchSingleTop = true
-                                        restoreState = true
                                     }
                                 }
                                 item.mapCategory?.let { mapViewModel.setCategory(it) }

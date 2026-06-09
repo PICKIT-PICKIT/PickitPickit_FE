@@ -98,7 +98,8 @@ class MyPageViewModel : ViewModel() {
 
     fun loadUserProfile() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, errorMessage = null) }
+            val showLoading = _uiState.value.nickname.isEmpty()
+            _uiState.update { it.copy(isLoading = showLoading, errorMessage = null) }
             
             val profile = userRepository.getProfile()
             if (profile != null) {

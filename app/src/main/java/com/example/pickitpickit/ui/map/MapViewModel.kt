@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.pickitpickit.GlobalApplication
 import com.example.pickitpickit.core.network.SearchRepository
+import com.example.pickitpickit.core.network.UserRepository
 import com.example.pickitpickit.ui.home.StoreItem
 import com.example.pickitpickit.ui.home.dummyStores
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,16 +14,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
+import com.example.pickitpickit.core.model.FavoriteStoreResponse
 
 class MapViewModel : ViewModel() {
 
     private val searchRepository = SearchRepository()
     private val storeRepository = com.example.pickitpickit.core.network.StoreRepository()
+    private val userRepository = UserRepository()
     private val userPreferences = GlobalApplication.userPreferences
 
     // 사용자 현재 위치 캐싱 (검색 시 정렬 옵션 결합을 위해 보관)
     private var currentLatitude: Double? = null
     private var currentLongitude: Double? = null
+
+    // 즐겨찾기 목록 저장
+    private val _favoriteStoreIds = MutableStateFlow<Set<Long>>(emptySet())
+    val favoriteStoreIds: StateFlow<Set<Long>> = _favoriteStoreIds.asStateFlow()
+
+    // 즐겨찾기 매장 상세 정보 목록 저장
+    private val _favoriteStores = MutableStateFlow<List<FavoriteStoreResponse>>(emptyList())
+    val favoriteStores: StateFlow<List<FavoriteStoreResponse>> = _favoriteStores.asStateFlow()
 
     // 현재 위치 공개 StateFlow (StoreDetailViewModel에 전달용)
     private val _userLatitude = MutableStateFlow<Double?>(null)
@@ -61,6 +72,7 @@ class MapViewModel : ViewModel() {
     init {
         // 뷰모델 생성 시 서버에서 최근 검색어 불러오기
         loadRecentSearches()
+        loadFavoriteStores()
         
         // DataStore 검색 반경 값 동적 구독 연동
         viewModelScope.launch {
@@ -90,6 +102,13 @@ class MapViewModel : ViewModel() {
                 type = type
             )
             _nearbyStores.value = stores
+
+            // 즐겨찾기 최신화
+            val favorites = userRepository.getFavoriteStores(latitude, longitude)
+            if (favorites != null) {
+                _favoriteStoreIds.value = favorites.map { it.store.id }.toSet()
+                _favoriteStores.value = favorites
+            }
         }
     }
 
@@ -136,6 +155,42 @@ class MapViewModel : ViewModel() {
                 lng = currentLongitude
             )
             _nearbyStores.value = stores
+
+            // 즐겨찾기 최신화
+            val favorites = userRepository.getFavoriteStores(currentLatitude, currentLongitude)
+            if (favorites != null) {
+                _favoriteStoreIds.value = favorites.map { it.store.id }.toSet()
+                _favoriteStores.value = favorites
+            }
+        }
+    }
+
+    fun loadFavoriteStores() {
+        viewModelScope.launch {
+            val favorites = userRepository.getFavoriteStores(currentLatitude, currentLongitude)
+            if (favorites != null) {
+                _favoriteStoreIds.value = favorites.map { it.store.id }.toSet()
+                _favoriteStores.value = favorites
+            }
+        }
+    }
+
+    fun toggleFavoriteStore(storeId: Long) {
+        viewModelScope.launch {
+            val isFav = _favoriteStoreIds.value.contains(storeId)
+            if (isFav) {
+                val error = userRepository.deleteFavoriteStore(storeId)
+                if (error == null) {
+                    _favoriteStoreIds.value = _favoriteStoreIds.value - storeId
+                    loadFavoriteStores()
+                }
+            } else {
+                val favResponse = userRepository.addFavoriteStore(storeId)
+                if (favResponse != null) {
+                    _favoriteStoreIds.value = _favoriteStoreIds.value + storeId
+                    loadFavoriteStores()
+                }
+            }
         }
     }
 
@@ -199,12 +254,13 @@ class MapViewModel : ViewModel() {
         _isBottomSheetVisible.value = false
     }
 
-    // 카테고리 + 검색어 + 검색반경(거리단위)을 함께 적용한 필터링 결과
+    // 카테고리 + 검색어 + 검색반경(거리단위)을 함께 적용한 필터링 결과 (좋아요 한 매장 최상단 우선 정렬)
     fun getFilteredStores(): List<StoreItem> {
         val query = _searchQuery.value.trim()
         val cleanQuery = query.removePrefix("#")
         val category = _selectedCategory.value
         val radius = _searchRadius.value
+        val favorites = _favoriteStoreIds.value
 
         return _nearbyStores.value.filter { store ->
             val matchCategory = category == MapCategory.ALL || store.category == category
@@ -218,6 +274,9 @@ class MapViewModel : ViewModel() {
             val matchDistance = store.distanceMeters <= radius
             
             matchCategory && matchQuery && matchDistance
-        }
+        }.sortedWith(
+            compareByDescending<StoreItem> { favorites.contains(it.id.toLong()) }
+                .thenBy { it.distanceMeters }
+        )
     }
 }

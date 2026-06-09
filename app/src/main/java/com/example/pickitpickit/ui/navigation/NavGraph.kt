@@ -14,6 +14,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,6 +32,8 @@ import com.example.pickitpickit.ui.home.HomeScreen
 import com.example.pickitpickit.ui.mypage.MyPageScreen
 import com.example.pickitpickit.ui.mypage.MyReviewsScreen
 import com.example.pickitpickit.ui.mypage.MyBragsScreen
+import com.example.pickitpickit.ui.mypage.FavoriteStoresScreen
+import com.example.pickitpickit.ui.mypage.FavoriteStoresViewModel
 import com.example.pickitpickit.ui.store.StoreDetailScreen
 import com.example.pickitpickit.ui.store.StoreDetailUiState
 import com.example.pickitpickit.ui.store.StoreDetailViewModel
@@ -65,7 +68,8 @@ fun MainNavGraph(
             MyPageScreen(
                 onLogoutClick = onLogoutClick,
                 onMyReviewsClick = { navController.navigate("my_reviews") },
-                onMyBragsClick = { navController.navigate("my_brags") }
+                onMyBragsClick = { navController.navigate("my_brags") },
+                onMyFavoriteStoresClick = { navController.navigate("favorite_stores") }
             )
         }
         composable("my_reviews") {
@@ -73,6 +77,21 @@ fun MainNavGraph(
         }
         composable("my_brags") {
             MyBragsScreen(onBackClick = { navController.popBackStack() })
+        }
+        composable("favorite_stores") {
+            val favoriteStoresViewModel: FavoriteStoresViewModel = viewModel(
+                factory = FavoriteStoresViewModel.Factory(
+                    userLatitude = userLat,
+                    userLongitude = userLng
+                )
+            )
+            FavoriteStoresScreen(
+                onBackClick = { navController.popBackStack() },
+                onStoreClick = { storeId ->
+                    navController.navigate("store_detail/$storeId")
+                },
+                viewModel = favoriteStoresViewModel
+            )
         }
         composable(
             route = "store_detail/{storeId}",
@@ -89,6 +108,11 @@ fun MainNavGraph(
                     userLongitude = userLng
                 )
             )
+
+            // 화면 진입 및 되돌아올 때마다 즐겨찾기 상태 최신화
+            LaunchedEffect(storeId) {
+                storeDetailViewModel.checkIfFavorite()
+            }
 
             val uiState by storeDetailViewModel.uiState.collectAsState()
 
@@ -158,11 +182,14 @@ fun MainNavGraph(
                     val isBragSubmitting by storeDetailViewModel.isBragSubmitting.collectAsState()
                     val currentUserId by storeDetailViewModel.currentUserId.collectAsState()
                     val writeGuide by storeDetailViewModel.writeGuide.collectAsState()
+                    val isFavorite by storeDetailViewModel.isFavorite.collectAsState()
 
                     StoreDetailScreen(
                         storeDetail = state.detail,
                         reviewData = state.reviewData,
                         bragData = state.bragData,
+                        isFavorite = isFavorite,
+                        onFavoriteToggle = { storeDetailViewModel.toggleFavoriteStore() },
                         onBackClick = { navController.popBackStack() },
                         onSubmitReview = { rating, difficulty, content ->
                             storeDetailViewModel.submitReview(rating, difficulty, content)
