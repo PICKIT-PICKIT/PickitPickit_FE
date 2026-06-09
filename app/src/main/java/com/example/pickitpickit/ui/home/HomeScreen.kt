@@ -227,7 +227,10 @@ fun HomeScreen(
                             mapViewModel.updateSearchQuery(inputText)
                             focusManager.clearFocus()
                         },
-                        onClearQuery = { inputText = "" },
+                        onClearQuery = { 
+                            inputText = ""
+                            mapViewModel.updateSearchQuery("")
+                        },
                         isFocused = isSearchFocused,
                         onFocusChanged = { isSearchFocused = it },
                         modifier = Modifier.weight(1f)
@@ -323,6 +326,7 @@ fun HomeScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 8.dp),
+            searchQuery = searchQuery,
             onClick = { mapViewModel.showBottomSheet() }
         )
     }
@@ -339,6 +343,7 @@ fun HomeScreen(
             NearbyStoreBottomSheet(
                 stores = filteredStores,
                 favoriteStoreIds = favoriteStoreIds,
+                searchQuery = searchQuery,
                 onFavoriteToggle = { mapViewModel.toggleFavoriteStore(it) },
                 onClose = { mapViewModel.hideBottomSheet() },
                 onStoreClick = onStoreClick
@@ -716,7 +721,11 @@ fun MapFabButton(
 // 내 주변 추천 버튼
 // ────────────────────────────────────────────────────────────
 @Composable
-fun NearbyRecommendButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
+fun NearbyRecommendButton(
+    modifier: Modifier = Modifier,
+    searchQuery: String = "",
+    onClick: () -> Unit
+) {
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(50.dp))
@@ -732,8 +741,9 @@ fun NearbyRecommendButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
+            val buttonText = if (searchQuery.isEmpty()) "내 주변 추천" else "검색 결과 보기"
             Text(
-                text = "내 주변 추천",
+                text = buttonText,
                 color = Color.White,
                 fontSize = 15.sp,
                 fontWeight = FontWeight.Bold
@@ -751,6 +761,7 @@ fun NearbyRecommendButton(modifier: Modifier = Modifier, onClick: () -> Unit) {
 fun NearbyStoreBottomSheet(
     stores: List<StoreItem>,
     favoriteStoreIds: Set<Long>,
+    searchQuery: String = "",
     onFavoriteToggle: (Long) -> Unit,
     onClose: () -> Unit,
     onStoreClick: (Int) -> Unit = {}
@@ -771,8 +782,13 @@ fun NearbyStoreBottomSheet(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
+        val titleText = if (searchQuery.isEmpty()) {
+            "주변 매장 ${stores.size}개"
+        } else {
+            "'$searchQuery' 검색 결과 ${stores.size}개"
+        }
         Text(
-            text = "주변 매장 ${stores.size}개",
+            text = titleText,
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.padding(horizontal = 20.dp)

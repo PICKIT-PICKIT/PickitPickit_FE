@@ -139,6 +139,12 @@ class MapViewModel : ViewModel() {
         if (query.isNotBlank()) {
             saveSearchLog(query)
             searchStores(query)
+        } else {
+            val lat = currentLatitude
+            val lng = currentLongitude
+            if (lat != null && lng != null) {
+                loadNearbyStores(lat, lng)
+            }
         }
     }
 
@@ -243,7 +249,7 @@ class MapViewModel : ViewModel() {
     }
 
     fun clearSearch() {
-        _searchQuery.value = ""
+        updateSearchQuery("")
     }
 
     fun showBottomSheet() {
