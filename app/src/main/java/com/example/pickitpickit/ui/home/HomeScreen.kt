@@ -53,6 +53,7 @@ import com.example.pickitpickit.R
 import com.example.pickitpickit.core.model.FavoriteStoreResponse
 import com.example.pickitpickit.ui.map.MapCategory
 import com.example.pickitpickit.ui.map.MapViewModel
+import com.example.pickitpickit.ui.theme.PickitPickitTheme
 import coil.compose.AsyncImage
 import androidx.compose.ui.layout.ContentScale
 import com.google.android.gms.location.LocationServices
@@ -1031,4 +1032,16 @@ fun NearbyStoreBottomSheetPreview() {
         onFavoriteToggle = {},
         onClose = {}
     )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun KakaoMapViewPreview() {
+    PickitPickitTheme {
+        KakaoMapView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+        )
+    }
 }
