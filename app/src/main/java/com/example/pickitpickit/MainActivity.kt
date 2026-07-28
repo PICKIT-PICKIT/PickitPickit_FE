@@ -14,7 +14,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -54,13 +53,13 @@ class MainActivity : ComponentActivity() {
             userPreferences.isOnboardingCompleted.collect { completed ->
                 if (startRoute == null) {
                     // 카카오 로그인 세션 확인
-                    UserApiClient.instance.me { user, error ->
-                        if (error != null) {
+                    UserApiClient.instance.me { _, error ->
+                        startRoute = if (error != null) {
                             // 로그인 정보가 없거나 에러 발생 시 로그인 화면으로
-                            startRoute = "Login"
+                            "Login"
                         } else {
                             // 로그인 되어 있는 경우 온보딩 완료 여부에 따라 경로 결정
-                            startRoute = if (completed) "Main" else "Onboarding"
+                            if (completed) "Main" else "Onboarding"
                         }
                     }
                 }
@@ -77,7 +76,7 @@ class MainActivity : ComponentActivity() {
                     RootScreen(
                         startRoute = route,
                         mapViewModel = mapViewModel,
-                        userPreferences = userPreferences
+                        userPreferences = userPreferences,
                     )
                 }
             }
@@ -92,7 +91,6 @@ fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: 
 
     NavHost(navController = rootNavController, startDestination = startRoute) {
         composable("Login") {
-            val context = androidx.compose.ui.platform.LocalContext.current
             LoginScreen(
                 onLoginSuccess = { onboardingCompleted ->
                     // 🌟 서버의 온보딩 완료 값(onboardingCompleted) 그대로 100% 신뢰하여 라우팅하는 원래 정석 로직으로 완벽 복원!
@@ -105,14 +103,14 @@ fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: 
                         popUpTo("Login") { inclusive = true }
                     }
                 },
-                userPreferences = userPreferences
+                userPreferences = userPreferences,
             )
         }
         composable("Onboarding") {
             OnboardingScreen(
                 onComplete = {
                     coroutineScope.launch {
-                        userPreferences.setOnboardingCompleted(true)
+                        userPreferences.setOnboardingCompleted(completed = true)
                     }
                     rootNavController.navigate("Main") {
                         popUpTo("Onboarding") { inclusive = true }
@@ -161,20 +159,17 @@ fun RootScreen(startRoute: String, mapViewModel: MapViewModel, userPreferences: 
             val authRepository = androidx.compose.runtime.remember {
                 com.example.pickitpickit.core.network.AuthRepository(userPreferences, context)
             }
-            MainScreen(
-                mapViewModel = mapViewModel,
-                onLogoutClick = {
-                    coroutineScope.launch {
-                        authRepository.logout { success ->
-                            if (success) {
-                                rootNavController.navigate("Login") {
-                                    popUpTo("Main") { inclusive = true }
-                                }
+            MainScreen(mapViewModel = mapViewModel) {
+                coroutineScope.launch {
+                    authRepository.logout { success ->
+                        if (success) {
+                            rootNavController.navigate("Login") {
+                                popUpTo("Main") { inclusive = true }
                             }
                         }
                     }
                 }
-            )
+            }
         }
     }
 }
@@ -204,7 +199,7 @@ fun MainScreen(mapViewModel: MapViewModel, onLogoutClick: () -> Unit) {
                     val isSelected = if (item == BottomNavMenuItem.MyPage) {
                         currentRoute == item.route
                     } else {
-                        currentRoute == BottomNavMenuItem.Home.route && currentCategory == item.mapCategory
+                        (currentRoute == BottomNavMenuItem.Home.route) && (currentCategory == item.mapCategory)
                     }
 
                     NavigationBarItem(
@@ -236,7 +231,7 @@ fun MainScreen(mapViewModel: MapViewModel, onLogoutClick: () -> Unit) {
             }
         }
     ) { innerPadding ->
-        com.example.pickitpickit.ui.navigation.MainNavGraph(
+        MainNavGraph(
             navController = navController,
             mapViewModel = mapViewModel,
             onLogoutClick = onLogoutClick,
@@ -245,6 +240,3 @@ fun MainScreen(mapViewModel: MapViewModel, onLogoutClick: () -> Unit) {
     }
 }
 
-object TestConfig {
-    var isForceOnboardingTest = false
-}
